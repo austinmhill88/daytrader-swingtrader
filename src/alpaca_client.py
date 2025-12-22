@@ -568,7 +568,7 @@ class AlpacaClient:
             to_date = (today + timedelta(days=lookahead)).isoformat()
             window_key = (from_date, to_date)
             
-            cache = getattr(self, '_earnings_cache', None)
+            cache = self._earnings_cache
             if cache and cache.get('window') == window_key and cache.get('fetched_at') == today:
                 earnings_date = cache.get('data', {}).get(symbol.upper())
                 if not earnings_date:
