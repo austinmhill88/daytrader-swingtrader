@@ -64,7 +64,10 @@ class TradingBot:
         )
         
         self.portfolio = PortfolioState(self.client)
-        self.execution_engine = ExecutionEngine(self.client, self.config['execution'])
+        # Pass execution config with session config embedded for toxic time window calculation
+        execution_config = self.config['execution'].copy()
+        execution_config['session'] = self.config.get('session', {})
+        self.execution_engine = ExecutionEngine(self.client, execution_config)
         self.risk_manager = RiskManager(self.config['risk'], self.portfolio, self.client)
         
         # Initialize alert notifier

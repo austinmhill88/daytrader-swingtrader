@@ -143,6 +143,11 @@ execution:
   enable_time_slicing: false
   time_slice_size_threshold_usd: 10000
   max_api_calls_per_minute: 200  # Rate limiting for Alpaca API
+  # Toxic time window filtering
+  enable_toxic_time_filtering: true
+  market_open_blackout_minutes: 5
+  market_close_blackout_minutes: 5
+
 
 # Phase 1: Backtesting configuration
 backtesting:
