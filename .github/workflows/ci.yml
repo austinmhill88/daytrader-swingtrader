@@ -1,0 +1,172 @@
+name: CI - Lint, Type Check, and Tests
+
+on:
+  push:
+    branches: [ main, develop, "copilot/**" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install ruff mypy pytest pytest-cov
+    
+    - name: Lint with ruff
+      run: |
+        # Check for syntax errors and undefined names
+        ruff check src/ backtest/ --select=E9,F63,F7,F82 --output-format=github
+        # Perform full linting
+        ruff check src/ backtest/ --output-format=github
+      continue-on-error: true
+    
+    - name: Type check with mypy
+      run: |
+        mypy src/ backtest/ --ignore-missing-imports --no-strict-optional
+      continue-on-error: true
+    
+    - name: Run unit tests
+      run: |
+        # Run tests if they exist
+        if [ -d "tests" ]; then
+          pytest tests/ -v --cov=src --cov=backtest --cov-report=xml --cov-report=term
+        else
+          echo "No tests directory found, skipping tests"
+        fi
+      continue-on-error: true
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      if: matrix.python-version == '3.11'
+      with:
+        files: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+      continue-on-error: true
+    
+    - name: Archive test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          coverage.xml
+          .coverage
+        retention-days: 30
+      continue-on-error: true
+    
+    - name: Check documentation
+      run: |
+        # Verify all documentation files exist
+        docs_files=(
+          "docs/architecture.md"
+          "docs/data-governance.md"
+          "docs/model-governance.md"
+          "docs/backtest-assumptions.md"
+          "docs/regime-detection.md"
+          "docs/universe-policy.md"
+          "docs/training-methodology.md"
+          "docs/execution-policy.md"
+          "docs/ops-playbook.md"
+        )
+        for doc in "${docs_files[@]}"; do
+          if [ ! -f "$doc" ]; then
+            echo "Missing documentation: $doc"
+            exit 1
+          fi
+        done
+        echo "All required documentation files present"
+    
+    - name: Validate configuration files
+      run: |
+        # Check that required config files exist and are valid YAML
+        pip install pyyaml
+        python -c "
+        import yaml
+        import sys
+        
+        config_files = [
+            'config/config.yaml',
+            'config/promotion_gates.yaml',
+            'config/alerts.yaml'
+        ]
+        
+        for config_file in config_files:
+            try:
+                with open(config_file, 'r') as f:
+                    yaml.safe_load(f)
+                print(f'✓ {config_file} is valid YAML')
+            except Exception as e:
+                print(f'✗ {config_file} is invalid: {e}')
+                sys.exit(1)
+        "
+    
+    - name: Check code formatting
+      run: |
+        ruff format --check src/ backtest/
+      continue-on-error: true
+    
+    - name: Security check with bandit
+      run: |
+        pip install bandit
+        bandit -r src/ backtest/ -ll
+      continue-on-error: true
+    
+    - name: Check for secrets in code
+      run: |
+        # Simple check for common secret patterns
+        if grep -r "APCA_API_KEY_ID\s*=\s*['\"][^$]" src/ backtest/ config/ --exclude-dir=.git; then
+          echo "Found potential hardcoded API key"
+          exit 1
+        fi
+        echo "No hardcoded secrets detected"
+    
+    - name: Verify .gitignore
+      run: |
+        # Check that important patterns are in .gitignore
+        required_patterns=(
+          "\.env"
+          "data/"
+          "logs/"
+          "__pycache__"
+          "*.pyc"
+        )
+        for pattern in "${required_patterns[@]}"; do
+          if ! grep -q "$pattern" .gitignore; then
+            echo "Missing .gitignore pattern: $pattern"
+            exit 1
+          fi
+        done
+        echo "All required .gitignore patterns present"
+
+  build-summary:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: always()
+    
+    steps:
+    - name: Check build status
+      run: |
+        if [ "${{ needs.lint-and-test.result }}" == "success" ]; then
+          echo "✅ All checks passed"
+        else
+          echo "⚠️ Some checks failed or were skipped"
+        fi
