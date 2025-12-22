@@ -192,13 +192,32 @@ jobs:
             'passed': len(failed_gates) == 0,
             'passed_gates': passed_gates,
             'failed_gates': failed_gates,
-            'metrics': metrics
+            'metrics': metrics,
+            'strategy': results['strategy'],
+            'date': date.today().isoformat()
         }
         with open('logs/gate_summary.json', 'w') as f:
             json.dump(summary, f, indent=2)
         
+        # Set output for GitHub Actions
+        with open(process.env['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"gates_passed={'true' if len(failed_gates) == 0 else 'false'}\n")
+            f.write(f"strategy={results['strategy']}\n")
+        
         exit(exit_code)
         PYTHON_SCRIPT
+      id: gate_eval
+      continue-on-error: true
+    
+    - name: Promote model to MLflow registry
+      if: steps.gate_eval.outputs.gates_passed == 'true'
+      run: |
+        echo "Promoting model to production..."
+        # python -m src.ml_trainer --promote \
+        #   --model-name ${{ steps.gate_eval.outputs.strategy }} \
+        #   --version latest \
+        #   --stage Production
+        echo "Model promotion complete (simulated for CI)"
       continue-on-error: true
     
     - name: Generate performance report
