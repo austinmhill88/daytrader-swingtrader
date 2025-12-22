@@ -98,7 +98,7 @@ strategies:
 
 # Phase 1: Regime detection configuration
 regime:
-  enabled: false  # enable in Phase 2
+  enabled: true  # Enable regime-based adjustments
   method: "threshold"  # threshold, hmm, markov_switching
   indicators:
     - vix_proxy
