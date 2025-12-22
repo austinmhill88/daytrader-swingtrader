@@ -98,7 +98,7 @@ strategies:
 
 # Phase 1: Regime detection configuration
 regime:
-  enabled: false  # enable in Phase 2
+  enabled: true  # Enable regime-based adjustments
   method: "threshold"  # threshold, hmm, markov_switching
   indicators:
     - vix_proxy
@@ -114,6 +114,8 @@ risk:
   daily_max_drawdown_pct: 2.0
   per_trade_risk_pct: 0.4
   max_position_size_pct: 5.0  # max % of equity per position
+  max_position_per_symbol_pct: 10.0  # max % of equity per symbol (allows adding to position)
+  max_qty_per_symbol: null  # optional absolute quantity limit per symbol
   max_gross_exposure_pct_intraday: 50
   max_gross_exposure_pct_swing: 100
   short_exposure_cap_pct: 50
@@ -140,6 +142,7 @@ execution:
   # Phase 3: Smart execution
   enable_time_slicing: false
   time_slice_size_threshold_usd: 10000
+  max_api_calls_per_minute: 200  # Rate limiting for Alpaca API
 
 # Phase 1: Backtesting configuration
 backtesting:
@@ -154,6 +157,7 @@ backtesting:
     commission_per_share: 0.0  # Alpaca has zero commission
     spread_cost_model: "dynamic"  # dynamic, fixed
     slippage_bps: 5
+    short_borrow_rate_annual: 0.003  # 0.3% annual rate for short positions
   # Phase 2: Overfitting prevention
   enable_purged_cv: false
   embargo_pct: 0.01

@@ -425,3 +425,40 @@ class AlpacaClient:
         except Exception as e:
             logger.error(f"Failed to close all positions: {e}")
             return False
+    
+    def is_shortable(self, symbol: str) -> bool:
+        """
+        Check if a symbol is shortable.
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            True if shortable, False otherwise
+        """
+        try:
+            asset = self._retry_on_failure(self.api.get_asset, symbol)
+            is_shortable = getattr(asset, 'shortable', False)
+            is_easy_to_borrow = getattr(asset, 'easy_to_borrow', False)
+            
+            # Symbol is shortable if both conditions are met
+            return is_shortable and is_easy_to_borrow
+        except Exception as e:
+            logger.warning(f"Error checking shortability for {symbol}: {e}")
+            return False  # Conservative: assume not shortable on error
+    
+    def get_asset(self, symbol: str) -> Optional[Any]:
+        """
+        Get asset information.
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            Asset object or None on failure
+        """
+        try:
+            return self._retry_on_failure(self.api.get_asset, symbol)
+        except Exception as e:
+            logger.error(f"Error getting asset info for {symbol}: {e}")
+            return None

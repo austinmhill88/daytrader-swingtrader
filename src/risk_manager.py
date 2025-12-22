@@ -14,16 +14,18 @@ class RiskManager:
     Risk management system with pre-trade checks, position limits, and kill-switch.
     """
     
-    def __init__(self, config: Dict, portfolio: PortfolioState):
+    def __init__(self, config: Dict, portfolio: PortfolioState, alpaca_client=None):
         """
         Initialize risk manager.
         
         Args:
             config: Risk configuration dictionary
             portfolio: PortfolioState instance
+            alpaca_client: AlpacaClient instance for shortability checks
         """
         self.config = config
         self.portfolio = portfolio
+        self.alpaca_client = alpaca_client
         
         # Risk limits
         self.daily_max_drawdown_pct = config.get('daily_max_drawdown_pct', 2.0)
@@ -39,11 +41,16 @@ class RiskManager:
         self.max_trades_per_day = config.get('max_trades_per_day', 100)
         self.max_losses_per_day = config.get('max_losses_per_day', 3)
         
+        # Per-symbol position limits
+        self.max_position_per_symbol_pct = config.get('max_position_per_symbol_pct', 10.0)
+        self.max_qty_per_symbol = config.get('max_qty_per_symbol', None)  # Optional absolute limit
+        
         # State tracking
         self.kill_switch_triggered = False
         self.consecutive_losses = 0
         self.trades_today = 0
         self.alerts: List[AlertMessage] = []
+        self.shortability_cache: Dict[str, bool] = {}  # Cache shortability checks
         
         logger.info(
             f"RiskManager initialized | "
@@ -148,33 +155,71 @@ class RiskManager:
         if projected_exposure > max_exposure:
             return False, f"Gross exposure would be {projected_exposure:.1f}% > max {max_exposure}%"
         
-        # 9. Check short exposure cap (if selling/shorting)
+        # 9. Check short exposure cap and shortability (if selling/shorting)
         if intent.side.value == "sell":
+            # Check if this would create or increase a short position
+            existing_pos = self.portfolio.get_position(intent.symbol)
+            # Selling creates/increases short if: no position OR position is long (closing) OR position is short (increasing)
+            # Only need to check shortability if creating new short or already short
+            is_short_trade = existing_pos is None or existing_pos.qty < 0
+            
+            if is_short_trade:
+                # Check if symbol is shortable
+                if not self._is_shortable(intent.symbol):
+                    return False, f"Symbol {intent.symbol} is not shortable"
+            
             # Calculate current short exposure
             short_exposure = 0.0
             for pos in self.portfolio.positions():
                 if pos.side == "short":
                     short_exposure += abs(pos.market_value)
             
-            # Add this trade
-            short_exposure += trade_value
+            # Add this trade if it's a short
+            if is_short_trade:
+                short_exposure += trade_value
             
             if equity > 0:
                 short_exposure_pct = (short_exposure / equity) * 100
                 if short_exposure_pct > self.short_exposure_cap_pct:
                     return False, f"Short exposure would be {short_exposure_pct:.1f}% > max {self.short_exposure_cap_pct}%"
         
-        # 10. Check if we already have a position (might want to reject or limit)
+        # 10. Check per-symbol position limits
         existing_pos = self.portfolio.get_position(intent.symbol)
         if existing_pos:
-            # If adding to position, check if it's in same direction
+            # Calculate total position value after trade
+            current_position_value = abs(existing_pos.market_value)
+            
+            # Check if we're adding to or closing the position
             if intent.side.value == "buy" and existing_pos.qty < 0:
-                pass  # Closing short position - OK
+                # Closing short position
+                pass  # OK
             elif intent.side.value == "sell" and existing_pos.qty > 0:
-                pass  # Closing long position - OK
+                # Closing long position
+                pass  # OK
             else:
-                # Adding to existing position - could implement additional checks
-                logger.debug(f"Adding to existing position in {intent.symbol}")
+                # Adding to existing position
+                projected_position_value = current_position_value + trade_value
+                
+                if equity > 0:
+                    projected_position_pct = (projected_position_value / equity) * 100
+                    if projected_position_pct > self.max_position_per_symbol_pct:
+                        return False, f"Position in {intent.symbol} would be {projected_position_pct:.1f}% > max {self.max_position_per_symbol_pct}% per symbol"
+                
+                # Check absolute quantity limit if configured
+                if self.max_qty_per_symbol is not None:
+                    projected_qty = abs(existing_pos.qty) + intent.qty
+                    if projected_qty > self.max_qty_per_symbol:
+                        return False, f"Position quantity in {intent.symbol} would be {projected_qty} > max {self.max_qty_per_symbol}"
+        else:
+            # New position - check against limits
+            if equity > 0:
+                position_pct = (trade_value / equity) * 100
+                if position_pct > self.max_position_per_symbol_pct:
+                    return False, f"New position in {intent.symbol} would be {position_pct:.1f}% > max {self.max_position_per_symbol_pct}% per symbol"
+            
+            if self.max_qty_per_symbol is not None and intent.qty > self.max_qty_per_symbol:
+                return False, f"Order quantity {intent.qty} > max {self.max_qty_per_symbol} per symbol"
+        
         
         # All checks passed
         return True, ""
@@ -207,6 +252,31 @@ class RiskManager:
         """Reset the kill switch (manual intervention required)."""
         self.kill_switch_triggered = False
         logger.warning("Kill switch manually reset")
+    
+    def _is_shortable(self, symbol: str) -> bool:
+        """
+        Check if a symbol is shortable.
+        Uses cache to avoid repeated API calls.
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            True if shortable, False otherwise
+        """
+        # Check cache first
+        if symbol in self.shortability_cache:
+            return self.shortability_cache[symbol]
+        
+        # Query API if we have a client
+        if self.alpaca_client:
+            is_shortable = self.alpaca_client.is_shortable(symbol)
+            self.shortability_cache[symbol] = is_shortable
+            return is_shortable
+        
+        # Conservative: if no client available, assume not shortable
+        logger.warning(f"Cannot check shortability for {symbol}: no Alpaca client")
+        return False
     
     def record_trade_result(self, pnl: float) -> None:
         """

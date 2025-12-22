@@ -59,6 +59,15 @@ class Backtester:
         self.initial_capital = 100000.0
         self.current_capital = self.initial_capital
         self.positions = {}
+        
+        # Cost and slippage modeling
+        backtest_config = self.config.get('backtesting', {})
+        transaction_costs = backtest_config.get('transaction_costs', {})
+        
+        self.commission_per_share = transaction_costs.get('commission_per_share', 0.0)
+        self.slippage_bps = transaction_costs.get('slippage_bps', 5)
+        self.spread_cost_model = transaction_costs.get('spread_cost_model', 'dynamic')
+        self.short_borrow_rate_annual = transaction_costs.get('short_borrow_rate_annual', 0.003)  # 0.3% annual
     
     def load_data(self, symbol: str, csv_path: str) -> pd.DataFrame:
         """
@@ -151,22 +160,46 @@ class Backtester:
     
     def _simulate_trade(self, bar: Bar, signal) -> None:
         """
-        Simulate trade execution (simplified).
+        Simulate trade execution with realistic slippage and costs.
         
         Args:
             bar: Current bar
             signal: Trading signal
         """
-        # Simplified: just track equity changes
-        # In production, would model slippage, commissions, partial fills, etc.
+        # Calculate trade size based on signal strength and confidence
+        position_size_pct = self.config.get('backtesting', {}).get('position_size_pct', 0.1)
+        trade_value_target = self.current_capital * position_size_pct * abs(signal.strength) * signal.confidence
+        trade_size = int(trade_value_target / bar.close)
         
-        trade_size = 100  # Simplified fixed size
-        trade_value = bar.close * trade_size
+        if trade_size <= 0:
+            return
+        
+        # Calculate slippage
+        slippage = self._calculate_slippage(bar, signal.strength > 0, trade_size)
+        
+        # Calculate spread cost
+        spread_cost = self._calculate_spread_cost(bar, trade_size)
+        
+        # Calculate commission
+        commission = self.commission_per_share * trade_size
+        
+        # Determine fill price
+        base_price = bar.close
         
         if signal.strength > 0:
+            # Buy - pay slippage and spread
+            fill_price = base_price * (1 + slippage + spread_cost)
+        else:
+            # Sell - receive less due to slippage and spread
+            fill_price = base_price * (1 - slippage - spread_cost)
+        
+        # Execute trade
+        if signal.strength > 0:
             # Buy
-            if trade_value <= self.current_capital:
-                self.current_capital -= trade_value
+            total_cost = (fill_price * trade_size) + commission
+            
+            if total_cost <= self.current_capital:
+                self.current_capital -= total_cost
                 self.positions[bar.symbol] = self.positions.get(bar.symbol, 0) + trade_size
                 
                 self.results['trades'].append({
@@ -175,13 +208,28 @@ class Backtester:
                     'action': 'BUY',
                     'qty': trade_size,
                     'price': bar.close,
+                    'fill_price': fill_price,
+                    'slippage_bps': slippage * 10000,
+                    'spread_cost_bps': spread_cost * 10000,
+                    'commission': commission,
+                    'total_cost': total_cost,
                     'strategy': signal.strategy_name
                 })
         
         elif signal.strength < 0:
             # Sell
             if bar.symbol in self.positions and self.positions[bar.symbol] >= trade_size:
-                self.current_capital += trade_value
+                # Initialize short cost
+                short_cost = 0
+                
+                # Calculate short borrow cost if this is a short position
+                if self.positions[bar.symbol] < 0:
+                    # Daily short borrow cost
+                    short_cost = abs(self.positions[bar.symbol]) * fill_price * (self.short_borrow_rate_annual / 252)
+                
+                total_proceeds = (fill_price * trade_size) - commission - short_cost
+                
+                self.current_capital += total_proceeds
                 self.positions[bar.symbol] -= trade_size
                 
                 self.results['trades'].append({
@@ -190,18 +238,102 @@ class Backtester:
                     'action': 'SELL',
                     'qty': trade_size,
                     'price': bar.close,
+                    'fill_price': fill_price,
+                    'slippage_bps': slippage * 10000,
+                    'spread_cost_bps': spread_cost * 10000,
+                    'commission': commission,
+                    'short_borrow_cost': short_cost,
+                    'total_proceeds': total_proceeds,
                     'strategy': signal.strategy_name
                 })
         
-        # Record equity
-        total_equity = self.current_capital + sum(
-            qty * bar.close for qty in self.positions.values()
-        )
+        # Record equity (mark positions to market)
+        # Note: This is simplified - in production would track last known price per symbol
+        total_equity = self.current_capital
+        for symbol, qty in self.positions.items():
+            if symbol == bar.symbol:
+                total_equity += qty * bar.close
+            else:
+                # Simplified: assume position hasn't changed
+                # In production, would maintain price cache per symbol
+                total_equity += qty * bar.close
         
         self.results['equity_curve'].append({
             'timestamp': bar.ts,
             'equity': total_equity
         })
+    
+    def _calculate_slippage(self, bar: Bar, is_buy: bool, qty: int) -> float:
+        """
+        Calculate slippage as a fraction of price.
+        
+        Args:
+            bar: Current bar
+            is_buy: True if buying, False if selling
+            qty: Order quantity
+            
+        Returns:
+            Slippage as decimal (e.g., 0.0005 for 5 bps)
+        """
+        # Base slippage from config
+        base_slippage_bps = self.slippage_bps
+        
+        # Adjust for time of day (higher slippage at open/close)
+        hour = bar.ts.hour
+        minute = bar.ts.minute
+        time_multiplier = 1.0
+        
+        if hour == 9 and minute < 45:
+            # First 15 minutes
+            time_multiplier = 2.0
+        elif hour == 15 and minute >= 45:
+            # Last 15 minutes
+            time_multiplier = 1.5
+        
+        # Adjust for order size (larger orders have more slippage)
+        # Assume average volume is in bar.volume
+        if bar.volume > 0:
+            volume_impact = min((qty / bar.volume) * 100, 2.0)  # Cap at 2x multiplier
+            size_multiplier = 1.0 + volume_impact
+        else:
+            size_multiplier = 1.0
+        
+        # Adjust for volatility (use high-low range as proxy)
+        if bar.high > bar.low:
+            daily_range_pct = (bar.high - bar.low) / bar.close
+            vol_multiplier = 1.0 + (daily_range_pct * 10)  # Scale up volatility impact
+        else:
+            vol_multiplier = 1.0
+        
+        # Combined slippage
+        adjusted_slippage_bps = base_slippage_bps * time_multiplier * size_multiplier * vol_multiplier
+        
+        return adjusted_slippage_bps / 10000
+    
+    def _calculate_spread_cost(self, bar: Bar, qty: int) -> float:
+        """
+        Calculate spread cost as a fraction of price.
+        
+        Args:
+            bar: Current bar
+            qty: Order quantity
+            
+        Returns:
+            Spread cost as decimal
+        """
+        if self.spread_cost_model == 'fixed':
+            # Fixed spread of 2 bps
+            return 0.0002
+        
+        # Dynamic spread based on high-low range
+        if bar.high > bar.low:
+            spread = (bar.high - bar.low) / bar.close
+            # Half spread for crossing
+            return spread / 2
+        
+        # Fallback to 2 bps
+        return 0.0002
+    
     
     def _calculate_metrics(self) -> None:
         """Calculate performance metrics."""

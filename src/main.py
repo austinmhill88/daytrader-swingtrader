@@ -5,6 +5,7 @@ import argparse
 import signal
 import sys
 import time
+import pandas as pd
 from datetime import datetime, time as dtime
 from typing import List, Dict, Optional
 from loguru import logger
@@ -19,6 +20,7 @@ from src.data_feed import HistoricalDataFeed
 from src.strategies.intraday_mean_reversion import IntradayMeanReversion
 from src.strategies.swing_trend_following import SwingTrendFollowing
 from src.models import Signal
+from src.regime_detector import RegimeDetector
 
 
 class TradingBot:
@@ -61,7 +63,10 @@ class TradingBot:
         
         self.portfolio = PortfolioState(self.client)
         self.execution_engine = ExecutionEngine(self.client, self.config['execution'])
-        self.risk_manager = RiskManager(self.config['risk'], self.portfolio)
+        self.risk_manager = RiskManager(self.config['risk'], self.portfolio, self.client)
+        
+        # Initialize regime detector
+        self.regime_detector = RegimeDetector(self.config)
         
         # Initialize strategies
         self.strategies = []
@@ -205,13 +210,24 @@ class TradingBot:
                 logger.warning(f"Invalid price for {signal.symbol}")
                 continue
             
+            # Apply regime-based position sizing adjustment
+            strategy_type = "intraday" if "intraday" in strategy_name.lower() else "swing"
+            regime_multiplier = self.regime_detector.get_position_size_multiplier(strategy_type)
+            adjusted_risk_pct = self.config['risk']['per_trade_risk_pct'] * regime_multiplier
+            
+            logger.debug(
+                f"Regime adjustment | {strategy_name} | "
+                f"Multiplier: {regime_multiplier:.2f}, "
+                f"Risk: {self.config['risk']['per_trade_risk_pct']:.2f}% -> {adjusted_risk_pct:.2f}%"
+            )
+            
             # Create order intent
             intent = self.execution_engine.create_order_intent(
                 signal=signal,
                 portfolio=self.portfolio,
                 current_price=current_price,
                 atr=atr,
-                per_trade_risk_pct=self.config['risk']['per_trade_risk_pct']
+                per_trade_risk_pct=adjusted_risk_pct
             )
             
             if intent:
@@ -255,6 +271,31 @@ class TradingBot:
                 # Update portfolio
                 self.portfolio.update()
                 
+                # Update regime detector with market data (every 5 minutes)
+                if current_time.minute % 5 == 0:
+                    for symbol in ['SPY', 'QQQ']:
+                        if symbol in self.universe or symbol == 'SPY':
+                            try:
+                                # Get recent bars for regime calculation
+                                bars_df = self.client.get_bars(
+                                    symbol, 
+                                    "1Min", 
+                                    limit=100
+                                )
+                                if bars_df is not None and len(bars_df) > 0:
+                                    df = pd.DataFrame({
+                                        'close': [float(b.close) for b in bars_df],
+                                        'high': [float(b.high) for b in bars_df],
+                                        'low': [float(b.low) for b in bars_df],
+                                        'volume': [int(b.volume) for b in bars_df]
+                                    })
+                                    self.regime_detector.update_market_data(symbol, df)
+                            except Exception as e:
+                                logger.warning(f"Error updating regime data for {symbol}: {e}")
+                    
+                    # Detect regime
+                    current_regime = self.regime_detector.detect_regime('SPY')
+                
                 # Get latest bars for each symbol and generate signals
                 all_signals = []
                 
@@ -266,8 +307,15 @@ class TradingBot:
                         if bar is None:
                             continue
                         
-                        # Run through each strategy
+                        # Run through each strategy (check regime gating)
                         for strategy in self.strategies:
+                            # Check if strategy should be enabled based on regime
+                            if not self.regime_detector.should_enable_strategy(strategy.name):
+                                logger.debug(
+                                    f"Strategy {strategy.name} disabled by regime detector"
+                                )
+                                continue
+                            
                             if strategy.is_enabled():
                                 signals = strategy.on_bar(bar)
                                 all_signals.extend(signals)
@@ -290,6 +338,16 @@ class TradingBot:
                 if current_time.minute % 15 == 0:
                     self.portfolio.log_summary()
                     self.risk_manager.log_risk_summary()
+                    
+                    # Log regime status
+                    regime_summary = self.regime_detector.get_regime_summary()
+                    if regime_summary['enabled']:
+                        logger.info(
+                            f"Regime Status | "
+                            f"Current: {regime_summary['current_regime']} | "
+                            f"Duration: {regime_summary['duration_minutes']:.1f}m | "
+                            f"Transitions: {regime_summary['num_transitions']}"
+                        )
                 
                 # Sleep until next poll
                 time.sleep(poll_interval)
