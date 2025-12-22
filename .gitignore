@@ -52,3 +52,41 @@ models/
 tmp/
 temp/
 *.tmp
+
+# MLflow and model tracking
+mlruns/
+mlartifacts/
+.mlflow/
+
+# Additional ML-specific ignores
+*.onnx
+*.pb
+*.tflite
+*.pt
+*.pth
+*.weights
+
+# Prometheus and monitoring data
+prometheus_data/
+grafana_data/
+
+# Backup files
+*.backup
+*.bak
+backups/
+
+# Compiled Python files
+*.pyc.orig
+
+# Ruff cache
+.ruff_cache/
+
+# MyPy cache
+.mypy_cache/
+
+# Coverage reports
+.coverage.*
+coverage.xml
+
+# Artifacts from CI/CD
+*.artifact

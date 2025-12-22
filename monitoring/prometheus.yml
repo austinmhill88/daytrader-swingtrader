@@ -1,0 +1,113 @@
+# Prometheus Configuration for Trading System Monitoring
+# This configuration file sets up Prometheus to scrape metrics from the trading system
+
+global:
+  scrape_interval: 15s  # Default scrape interval
+  evaluation_interval: 15s  # How frequently to evaluate rules
+  external_labels:
+    cluster: 'trading-system'
+    environment: 'production'  # Change to 'paper' or 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - 'alertmanager:9093'
+
+# Rule files for alerts (optional)
+# rule_files:
+#   - 'alerts/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Trading system metrics
+  - job_name: 'trading-system'
+    scrape_interval: 5s  # Scrape every 5 seconds for real-time metrics
+    static_configs:
+      - targets: ['localhost:9101']  # Trading system metrics endpoint
+        labels:
+          instance: 'trading-bot-1'
+          service: 'trading-system'
+    
+    # Scrape timeout
+    scrape_timeout: 5s
+    
+    # Metrics path (default is /metrics)
+    metrics_path: '/metrics'
+    
+    # Optional: Relabel configs to customize metric labels
+    # relabel_configs:
+    #   - source_labels: [__address__]
+    #     target_label: __param_target
+    #   - source_labels: [__param_target]
+    #     target_label: instance
+
+  # System metrics (node_exporter for OS-level metrics)
+  # Uncomment if you want to monitor system resources
+  # - job_name: 'node'
+  #   scrape_interval: 10s
+  #   static_configs:
+  #     - targets: ['localhost:9100']
+  #       labels:
+  #         instance: 'trading-pc'
+  #         service: 'node-exporter'
+
+  # Docker metrics (if running in Docker)
+  # - job_name: 'docker'
+  #   scrape_interval: 10s
+  #   static_configs:
+  #     - targets: ['localhost:9323']
+  #       labels:
+  #         instance: 'docker-daemon'
+
+# Storage configuration
+# By default, Prometheus stores data in ./data directory
+# Adjust retention time based on your needs
+storage:
+  tsdb:
+    path: /prometheus/data
+    retention.time: 30d  # Keep 30 days of metrics data
+    retention.size: 10GB  # Or 10GB, whichever comes first
+
+# Web configuration
+# Configure web UI and API
+# web:
+#   listen_address: '0.0.0.0:9090'
+#   external_url: 'http://localhost:9090'
+#   enable_lifecycle: true  # Enable /reload endpoint
+
+# Remote write (optional - for long-term storage)
+# remote_write:
+#   - url: 'http://prometheus-remote-storage:9201/write'
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 50
+#       max_samples_per_send: 1000
+
+# Remote read (optional)
+# remote_read:
+#   - url: 'http://prometheus-remote-storage:9201/read'
+
+# Tracing configuration (optional - for distributed tracing)
+# tracing:
+#   endpoint: 'jaeger:4318'
+
+# Example metric labels to expect from trading system:
+#
+# trading_pnl_total{strategy="intraday_mean_reversion", type="realized"}
+# trading_pnl_total{strategy="intraday_mean_reversion", type="unrealized"}
+# trading_positions_open{strategy="intraday_mean_reversion"}
+# trading_exposure_pct{type="gross"}
+# trading_exposure_pct{type="net"}
+# trading_kill_switch{status="active"}
+# trading_order_latency_seconds{percentile="0.5"}
+# trading_order_latency_seconds{percentile="0.95"}
+# trading_order_latency_seconds{percentile="0.99"}
+# trading_fill_rate{strategy="intraday_mean_reversion"}
+# trading_slippage_bps{strategy="intraday_mean_reversion"}
+# trading_data_feed_latency_seconds{percentile="0.95"}
+# trading_errors_total{component="execution_engine", severity="error"}
+# system_cpu_usage_pct
+# system_memory_usage_pct
+# system_disk_usage_pct
