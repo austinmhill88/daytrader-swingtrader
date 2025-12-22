@@ -265,3 +265,181 @@ class UniverseAnalytics:
             'num_symbols': len(symbols),
             'symbols': symbols[:10] + (['...'] if len(symbols) > 10 else [])
         }
+    
+    def filter_earnings_blackout(
+        self,
+        symbols: List[str],
+        alpaca_client=None,
+        blackout_days_before: int = 2,
+        blackout_days_after: int = 1
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Filter out symbols in earnings blackout period.
+        
+        Args:
+            symbols: List of symbols to filter
+            alpaca_client: AlpacaClient instance for earnings calendar
+            blackout_days_before: Days before earnings to blackout
+            blackout_days_after: Days after earnings to blackout
+            
+        Returns:
+            Tuple of (tradeable_symbols, blackout_symbols)
+        """
+        if alpaca_client is None:
+            # Can't check without client, return all as tradeable
+            logger.warning("No Alpaca client provided for earnings blackout check")
+            return symbols, []
+        
+        from datetime import datetime, timedelta
+        
+        tradeable = []
+        blackout = []
+        
+        today = datetime.now().date()
+        blackout_start = today - timedelta(days=blackout_days_before)
+        blackout_end = today + timedelta(days=blackout_days_after)
+        
+        for symbol in symbols:
+            try:
+                # Check if symbol has earnings in blackout window
+                # Note: Alpaca may not have direct earnings calendar API
+                # This is a placeholder for the logic
+                # In production, you'd use a dedicated earnings calendar service
+                
+                # For now, always pass (no earnings blackout)
+                # TODO: Integrate with earnings calendar service
+                tradeable.append(symbol)
+                
+            except Exception as e:
+                logger.warning(f"Error checking earnings for {symbol}: {e}")
+                # Conservative: add to tradeable if can't check
+                tradeable.append(symbol)
+        
+        if blackout:
+            logger.info(
+                f"Earnings blackout | "
+                f"{len(blackout)} symbols in blackout period: {', '.join(blackout[:5])}"
+            )
+        
+        return tradeable, blackout
+    
+    def filter_shortable(
+        self,
+        symbols: List[str],
+        alpaca_client=None
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Filter symbols by shortability.
+        
+        Args:
+            symbols: List of symbols to filter
+            alpaca_client: AlpacaClient instance for shortability checks
+            
+        Returns:
+            Tuple of (shortable_symbols, non_shortable_symbols)
+        """
+        if alpaca_client is None:
+            logger.warning("No Alpaca client provided for shortability check")
+            return symbols, []
+        
+        shortable = []
+        non_shortable = []
+        
+        for symbol in symbols:
+            try:
+                if alpaca_client.is_shortable(symbol):
+                    shortable.append(symbol)
+                else:
+                    non_shortable.append(symbol)
+            except Exception as e:
+                logger.warning(f"Error checking shortability for {symbol}: {e}")
+                # Conservative: add to shortable if can't check
+                shortable.append(symbol)
+        
+        logger.info(
+            f"Shortability check | "
+            f"{len(shortable)}/{len(symbols)} symbols are shortable "
+            f"({100*len(shortable)/len(symbols):.1f}%)"
+        )
+        
+        if non_shortable:
+            logger.debug(
+                f"Non-shortable symbols: {', '.join(non_shortable[:10])}"
+                + ("..." if len(non_shortable) > 10 else "")
+            )
+        
+        return shortable, non_shortable
+    
+    def build_universe_with_filters(
+        self,
+        symbol_data: Dict[str, pd.DataFrame],
+        tier: str = 'core',
+        alpaca_client=None,
+        apply_earnings_filter: bool = True,
+        apply_shortability_filter: bool = False,
+        previous_universe: Optional[List[str]] = None
+    ) -> Dict:
+        """
+        Build universe with earnings and shortability filters.
+        
+        Args:
+            symbol_data: Dictionary of symbol -> DataFrame
+            tier: 'core' or 'extended'
+            alpaca_client: AlpacaClient for filtering
+            apply_earnings_filter: Filter earnings blackout periods
+            apply_shortability_filter: Filter non-shortable symbols
+            previous_universe: Previous universe for change tracking
+            
+        Returns:
+            Dictionary with universe and metadata
+        """
+        # Build base universe
+        base_universe = self.build_universe(symbol_data, tier)
+        
+        # Apply earnings filter
+        if apply_earnings_filter and alpaca_client:
+            tradeable, blackout = self.filter_earnings_blackout(
+                base_universe, alpaca_client
+            )
+        else:
+            tradeable = base_universe
+            blackout = []
+        
+        # Apply shortability filter
+        if apply_shortability_filter and alpaca_client:
+            shortable, non_shortable = self.filter_shortable(
+                tradeable, alpaca_client
+            )
+            final_universe = shortable
+        else:
+            final_universe = tradeable
+            shortable = tradeable
+            non_shortable = []
+        
+        # Track membership changes
+        if previous_universe is not None:
+            added = set(final_universe) - set(previous_universe)
+            removed = set(previous_universe) - set(final_universe)
+            
+            if added:
+                logger.info(
+                    f"Universe additions ({len(added)}): {', '.join(list(added)[:5])}"
+                    + ("..." if len(added) > 5 else "")
+                )
+            
+            if removed:
+                logger.info(
+                    f"Universe removals ({len(removed)}): {', '.join(list(removed)[:5])}"
+                    + ("..." if len(removed) > 5 else "")
+                )
+        
+        return {
+            'universe': final_universe,
+            'base_count': len(base_universe),
+            'earnings_blackout_count': len(blackout),
+            'non_shortable_count': len(non_shortable),
+            'final_count': len(final_universe),
+            'blackout_symbols': blackout,
+            'non_shortable_symbols': non_shortable,
+            'tier': tier
+        }
