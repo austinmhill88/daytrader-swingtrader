@@ -33,6 +33,9 @@ class TradingScheduler:
         self.scheduler = BackgroundScheduler(timezone=self.timezone)
         self.task_handlers: Dict[str, Callable] = {}
         
+        # Alert notifier reference (will be set externally)
+        self.notifier = None
+        
         logger.info(f"TradingScheduler initialized | Enabled: {self.enabled}, TZ: {self.timezone}")
     
     def register_handler(self, action: str, handler: Callable) -> None:
@@ -56,6 +59,8 @@ class TradingScheduler:
         """
         logger.info(f"Executing scheduled task: {task_name}")
         
+        failed_actions = []
+        
         for action in actions:
             if action in self.task_handlers:
                 try:
@@ -64,10 +69,29 @@ class TradingScheduler:
                     logger.info(f"Action completed: {action}")
                 except Exception as e:
                     logger.error(f"Error in action {action}: {e}", exc_info=True)
+                    failed_actions.append(action)
+                    
+                    # Send alert for failed action
+                    if self.notifier:
+                        self.notifier.send_alert(
+                            title=f"Scheduled Task Failed: {action}",
+                            message=f"Action '{action}' in task '{task_name}' failed: {str(e)}",
+                            severity="warning",
+                            metadata={'task': task_name, 'action': action, 'error': str(e)}
+                        )
             else:
                 logger.warning(f"No handler registered for action: {action}")
         
         logger.info(f"Task completed: {task_name}")
+        
+        # Send summary alert if any actions failed
+        if failed_actions and self.notifier:
+            self.notifier.send_alert(
+                title=f"Task Completed with Failures: {task_name}",
+                message=f"Task '{task_name}' completed with {len(failed_actions)} failed actions: {', '.join(failed_actions)}",
+                severity="warning",
+                metadata={'task': task_name, 'failed_actions': ', '.join(failed_actions)}
+            )
     
     def start(self) -> None:
         """Start the scheduler with configured tasks."""

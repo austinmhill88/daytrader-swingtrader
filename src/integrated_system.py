@@ -77,11 +77,21 @@ class TradingSystem:
         self.metrics_tracker = MetricsTracker(self.config)
         logger.info("✓ Metrics tracker initialized")
         
+        # Initialize notifier (will be wired to other components)
+        from src.notifier import AlertNotifier
+        self.notifier = AlertNotifier('config/alerts.yaml')
+        logger.info("✓ Alert notifier initialized")
+        
+        # Wire notifier to self-healing
+        self.self_healing.notifier = self.notifier
+        
         # Initialize scheduler
         scheduler_config = self.config.get('scheduler', {})
         if scheduler_config.get('enabled', False):
             self.scheduler = TradingScheduler(self.config)
             self._register_scheduled_actions()
+            # Wire notifier to scheduler
+            self.scheduler.notifier = self.notifier
             logger.info("✓ Scheduler initialized")
         else:
             self.scheduler = None
@@ -332,7 +342,7 @@ class TradingSystem:
         if self.portfolio:
             status['portfolio'] = {
                 'equity': self.portfolio.equity(),
-                'cash': self.portfolio.cash,
+                'cash': self.portfolio.cash(),
                 'positions': self.portfolio.position_count(),
                 'daily_pnl': self.portfolio.daily_pnl(),
                 'daily_pnl_pct': self.portfolio.daily_pnl_pct()

@@ -75,8 +75,9 @@ class TradingBot:
         if self.prometheus.enabled:
             self.prometheus.start()
         
-        # Link prometheus to execution engine and notifier to risk manager
+        # Link prometheus to execution engine, and notifier to risk manager and execution engine
         self.execution_engine.prometheus = self.prometheus
+        self.execution_engine.notifier = self.notifier
         self.risk_manager.notifier = self.notifier
         
         # Initialize regime detector
@@ -402,7 +403,7 @@ class TradingBot:
                     # Update Prometheus metrics
                     self.prometheus.update_portfolio_metrics(
                         equity=self.portfolio.equity(),
-                        cash=self.portfolio.cash,
+                        cash=self.portfolio.cash(),
                         positions_value=self.portfolio.positions_value(),
                         daily_pnl=self.portfolio.daily_pnl,
                         daily_pnl_pct=self.portfolio.daily_pnl_pct

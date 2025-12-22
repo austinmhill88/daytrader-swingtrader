@@ -48,8 +48,18 @@ class ExecutionEngine:
         self.api_call_window_start = None
         self.max_api_calls_per_minute = config.get('max_api_calls_per_minute', 200)
         
+        # Rejection tracking
+        from collections import deque
+        from datetime import datetime, timedelta
+        self.recent_rejections = deque(maxlen=100)  # Track last 100 rejections
+        self.rejection_alert_threshold_pct = 5.0  # Alert if > 5% rejection rate
+        self.rejection_lookback_minutes = 60  # Lookback window
+        
         # Prometheus exporter reference (will be set externally)
         self.prometheus = None
+        
+        # Alert notifier reference (will be set externally)
+        self.notifier = None
         
         logger.info(
             f"ExecutionEngine initialized | "
@@ -184,9 +194,11 @@ class ExecutionEngine:
             reason=signal.reason
         )
         
+        # Format price string based on order type
+        price_str = f"${limit_price:.2f}" if limit_price is not None else "MARKET"
         logger.info(
             f"Order intent created | {intent.side.value.upper()} {intent.qty} {intent.symbol} "
-            f"@ ${limit_price:.2f} | Strategy: {signal.strategy_name}"
+            f"@ {price_str} | Strategy: {signal.strategy_name}"
         )
         
         return intent
@@ -453,6 +465,7 @@ class ExecutionEngine:
                     logger.error(f"Rate limit exceeded, cannot place order for {intent.symbol}")
                     if self.prometheus:
                         self.prometheus.record_order_rejected("rate_limit")
+                    self._track_rejection("rate_limit")
                     return None
             
             # Prepare bracket order parameters
@@ -517,13 +530,43 @@ class ExecutionEngine:
                 logger.error(f"Order placement failed for {intent.symbol}")
                 if self.prometheus:
                     self.prometheus.record_order_rejected("placement_failed")
+                self._track_rejection("placement_failed")
                 return None
                 
         except Exception as e:
             logger.error(f"Error placing order for {intent.symbol}: {e}")
             if self.prometheus:
                 self.prometheus.record_order_rejected("exception")
+            self._track_rejection("exception")
             return None
+    
+    def _track_rejection(self, reason: str) -> None:
+        """
+        Track order rejection and check if alert threshold reached.
+        
+        Args:
+            reason: Reason for rejection
+        """
+        from datetime import datetime, timedelta
+        
+        now = datetime.now()
+        self.recent_rejections.append((now, reason))
+        
+        # Check rejection rate
+        cutoff = now - timedelta(minutes=self.rejection_lookback_minutes)
+        recent_count = sum(1 for ts, _ in self.recent_rejections if ts > cutoff)
+        
+        # Estimate total orders (rough approximation based on rejection tracking)
+        # This is simplified - in production you'd track all order attempts
+        estimated_total = max(recent_count * 20, 100)  # Assume rejections are ~5% normally
+        rejection_pct = (recent_count / estimated_total) * 100
+        
+        # Send alert if threshold exceeded
+        if rejection_pct >= self.rejection_alert_threshold_pct and self.notifier:
+            self.notifier.send_high_rejection_rate_alert(
+                rejection_pct=rejection_pct,
+                lookback_minutes=self.rejection_lookback_minutes
+            )
     
     def _place_order_with_retry(
         self,

@@ -50,6 +50,9 @@ class SelfHealingMonitor:
         self.is_running = False
         self.monitor_thread = None
         
+        # Alert notifier reference (will be set externally)
+        self.notifier = None
+        
         logger.info("SelfHealingMonitor initialized")
     
     def register_watchdog(
@@ -156,12 +159,42 @@ class SelfHealingMonitor:
         if component in self.recovery_actions:
             try:
                 logger.warning(f"Attempting recovery for {component}")
+                
+                # Send alert about component failure
+                if self.notifier:
+                    self.notifier.send_alert(
+                        title=f"Component Failure: {component}",
+                        message=f"Component {component} is unhealthy, attempting recovery",
+                        severity="critical",
+                        metadata={'component': component, 'action': 'recovery_initiated'}
+                    )
+                
                 recovery_fn = self.recovery_actions[component]
                 recovery_fn()
                 logger.info(f"Recovery action completed for {component}")
+                
+                # Send success alert
+                if self.notifier:
+                    self.notifier.send_alert(
+                        title=f"Component Recovered: {component}",
+                        message=f"Recovery action completed for {component}",
+                        severity="info",
+                        metadata={'component': component, 'action': 'recovery_completed'}
+                    )
+                
                 return True
             except Exception as e:
                 logger.error(f"Recovery failed for {component}: {e}")
+                
+                # Send failure alert
+                if self.notifier:
+                    self.notifier.send_alert(
+                        title=f"Recovery Failed: {component}",
+                        message=f"Recovery failed for {component}: {str(e)}",
+                        severity="critical",
+                        metadata={'component': component, 'error': str(e)}
+                    )
+                
                 return False
         else:
             logger.warning(f"No recovery action registered for {component}")
