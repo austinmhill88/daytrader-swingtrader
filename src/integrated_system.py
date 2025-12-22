@@ -185,8 +185,15 @@ class TradingSystem:
         logger.warning("Attempting data feed recovery...")
         if self.alpaca_client:
             try:
-                # Reconnection logic would go here
-                logger.info("Data feed reconnection initiated")
+                # Attempt to reconnect data stream
+                # Note: Actual implementation depends on data feed architecture
+                # This is a placeholder for the reconnection logic that would:
+                # 1. Close existing WebSocket connection
+                # 2. Wait brief period (exponential backoff)
+                # 3. Reinitialize connection
+                # 4. Resubscribe to symbols
+                logger.info("Data feed reconnection initiated (implementation pending)")
+                # TODO: Implement actual reconnection in Phase 5 / production
             except Exception as e:
                 logger.error(f"Data feed recovery failed: {e}")
     

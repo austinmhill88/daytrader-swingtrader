@@ -230,7 +230,11 @@ class WalkForwardBacktester:
                             
                             elif signal.strength > 0 and symbol not in positions:
                                 # Entry signal
-                                qty = max(1, int(capital * 0.1 / bar.close))  # Simple sizing
+                                # Use configurable position size from config
+                                position_size_pct = self.config.get('backtesting', {}).get(
+                                    'position_size_pct', 0.1  # 10% default
+                                )
+                                qty = max(1, int(capital * position_size_pct / bar.close))
                                 entry_price = self._apply_slippage(bar.close, "buy")
                                 cost = qty * entry_price + self._calculate_costs(qty, entry_price)
                                 

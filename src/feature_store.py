@@ -118,7 +118,12 @@ class FeatureStore:
             
             # Regime features
             df['realized_vol'] = df['returns'].rolling(20).std() * np.sqrt(252)
-            df['vol_regime'] = pd.cut(df['realized_vol'], bins=[0, 0.15, 0.25, 1.0], labels=['low', 'med', 'high'])
+            # Use inf for upper bound to handle extreme volatility
+            df['vol_regime'] = pd.cut(
+                df['realized_vol'],
+                bins=[0, 0.15, 0.25, float('inf')],
+                labels=['low', 'med', 'high']
+            )
             
             logger.debug(f"Computed {len([c for c in df.columns if c not in ['open', 'high', 'low', 'close', 'volume']])} features")
             

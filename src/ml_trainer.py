@@ -370,9 +370,12 @@ class MLModelTrainer:
         if 'num_trades' in metrics and metrics['num_trades'] < self.min_trades:
             failed_gates.append(f"Trades {metrics['num_trades']} < {self.min_trades}")
         
-        # Check win rate
-        if 'win_rate' in metrics and metrics['win_rate'] < self.min_win_rate * 100:
-            failed_gates.append(f"Win rate {metrics['win_rate']:.1f}% < {self.min_win_rate*100}%")
+        # Check win rate (expecting metrics in percentage format)
+        if 'win_rate' in metrics:
+            # Standardize: metrics should be in percentage (e.g., 45.0 for 45%)
+            # config value is decimal (e.g., 0.45 for 45%)
+            if metrics['win_rate'] < self.min_win_rate * 100:
+                failed_gates.append(f"Win rate {metrics['win_rate']:.1f}% < {self.min_win_rate*100}%")
         
         passed = len(failed_gates) == 0
         

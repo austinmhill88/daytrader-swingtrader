@@ -148,6 +148,7 @@ backtesting:
   test_window_days: 63   # 3 months
   step_days: 21          # 1 month step
   min_trades_per_period: 10
+  position_size_pct: 0.1  # 10% of capital per position in backtest
   # Phase 1: Cost modeling
   transaction_costs:
     commission_per_share: 0.0  # Alpaca has zero commission
