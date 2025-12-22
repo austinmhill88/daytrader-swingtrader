@@ -539,16 +539,70 @@ class AlpacaClient:
             True if earnings within timeframe, False otherwise
             
         Note:
-            This is a placeholder that returns False until integrated
-            with an actual earnings calendar service.
+            Integrates with Alpha Vantage for earnings calendar data.
+            Set ALPHA_VANTAGE_API_KEY environment variable to enable.
         """
         try:
-            # Placeholder - always returns False
-            # TODO: Implement with actual earnings calendar service
-            # Example integration points:
-            # - Alpha Vantage: /query?function=EARNINGS_CALENDAR
-            # - FMP: /v3/earnings_calendar/{symbol}
-            # - Custom scraper from investor relations pages
+            import os
+            import requests
+            from datetime import datetime, timedelta
+            
+            # Check if Alpha Vantage API key is configured
+            api_key = os.environ.get('ALPHA_VANTAGE_API_KEY')
+            if not api_key:
+                logger.debug("ALPHA_VANTAGE_API_KEY not set, earnings check disabled")
+                return False
+            
+            # Query Alpha Vantage earnings calendar
+            url = "https://www.alphavantage.co/query"
+            params = {
+                'function': 'EARNINGS_CALENDAR',
+                'symbol': symbol,
+                'horizon': '3month',
+                'apikey': api_key
+            }
+            
+            response = requests.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            
+            # Parse CSV response
+            import csv
+            from io import StringIO
+            
+            csv_data = StringIO(response.text)
+            reader = csv.DictReader(csv_data)
+            
+            # Check for earnings within the next days_ahead
+            today = datetime.now().date()
+            cutoff = today + timedelta(days=days_ahead)
+            
+            for row in reader:
+                if row.get('symbol') != symbol:
+                    continue
+                
+                # Parse report date
+                report_date_str = row.get('reportDate')
+                if not report_date_str:
+                    continue
+                
+                try:
+                    report_date = datetime.strptime(report_date_str, '%Y-%m-%d').date()
+                    
+                    # Check if earnings is within our window
+                    if today <= report_date <= cutoff:
+                        logger.info(
+                            f"Earnings detected for {symbol} on {report_date_str} "
+                            f"(within {days_ahead} days)"
+                        )
+                        return True
+                except ValueError:
+                    logger.warning(f"Could not parse earnings date: {report_date_str}")
+                    continue
+            
+            return False
+            
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Error querying earnings calendar for {symbol}: {e}")
             return False
         except Exception as e:
             logger.warning(f"Error checking earnings for {symbol}: {e}")

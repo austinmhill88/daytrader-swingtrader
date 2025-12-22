@@ -252,15 +252,76 @@ class AlertNotifier:
             message: Alert message
             severity: Alert severity
             metadata: Additional metadata
-            
-        Note:
-            Email implementation is not yet complete. This is a placeholder
-            for future SMTP integration. Enable email alerts only when
-            implementation is complete.
         """
-        # TODO: Implement SMTP email sending
-        # Consider using smtplib or sendgrid/mailgun for production
-        logger.info(f"Email alert (not implemented): {title} - {message}")
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        try:
+            # Get email configuration
+            smtp_server = self.email_config.get('smtp_server')
+            smtp_port = self.email_config.get('smtp_port', 587)
+            sender_email = self.email_config.get('sender_email')
+            recipient_emails = self.email_config.get('recipient_emails', [])
+            use_tls = self.email_config.get('use_tls', True)
+            
+            # Resolve environment variables
+            if sender_email and sender_email.startswith('${') and sender_email.endswith('}'):
+                env_var = sender_email[2:-1]
+                sender_email = os.environ.get(env_var)
+            
+            # Resolve recipient emails
+            resolved_recipients = []
+            for email in recipient_emails:
+                if email.startswith('${') and email.endswith('}'):
+                    env_var = email[2:-1]
+                    resolved_email = os.environ.get(env_var)
+                    if resolved_email:
+                        resolved_recipients.append(resolved_email)
+                else:
+                    resolved_recipients.append(email)
+            
+            if not smtp_server or not sender_email or not resolved_recipients:
+                logger.warning("Email configuration incomplete, skipping email alert")
+                return
+            
+            # Get password from environment
+            smtp_password = os.environ.get('ALERT_EMAIL_PASSWORD')
+            if not smtp_password:
+                logger.warning("ALERT_EMAIL_PASSWORD not set, skipping email alert")
+                return
+            
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = sender_email
+            msg['To'] = ', '.join(resolved_recipients)
+            msg['Subject'] = f"[{severity.upper()}] {title}"
+            
+            # Build email body
+            body = f"{title}\n\n{message}\n\n"
+            
+            if metadata:
+                body += "Details:\n"
+                for key, value in metadata.items():
+                    body += f"  {key}: {value}\n"
+            
+            body += f"\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            body += f"\nSeverity: {severity.upper()}"
+            
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Send email
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+                if use_tls:
+                    server.starttls()
+                server.login(sender_email, smtp_password)
+                server.send_message(msg)
+            
+            logger.debug(f"Email alert sent: {title}")
+            
+        except Exception as e:
+            logger.error(f"Failed to send email alert: {e}")
+            raise
     
     def send_kill_switch_alert(self, reason: str, drawdown_pct: Optional[float] = None) -> None:
         """

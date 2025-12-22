@@ -477,22 +477,29 @@ class ExecutionEngine:
             
             # Parse times
             now = datetime.now(timezone.utc)
-            market_open = dateutil.parser.parse(clock.next_open) if hasattr(clock, 'next_open') else None
+            
+            # Use the current session's open/close times
+            # clock.next_open is next session if market is open, so use timestamp to determine today's session
+            # For Alpaca, when market is open, we need to calculate from the current session
             market_close = dateutil.parser.parse(clock.next_close) if hasattr(clock, 'next_close') else None
             
-            if not market_open or not market_close:
+            if not market_close:
                 return False  # Can't determine, allow trading
+            
+            # Calculate market open time from close (market open is 6.5 hours before close for US markets)
+            from datetime import timedelta
+            market_open = market_close - timedelta(hours=6, minutes=30)
             
             # Calculate minutes from open/close
             minutes_from_open = (now - market_open).total_seconds() / 60
             minutes_to_close = (market_close - now).total_seconds() / 60
             
             # Check if in blackout window
-            if minutes_from_open < self.market_open_blackout_minutes:
+            if 0 <= minutes_from_open < self.market_open_blackout_minutes:
                 logger.debug(f"Toxic window: {minutes_from_open:.1f}min from open")
                 return True
             
-            if minutes_to_close < self.market_close_blackout_minutes:
+            if 0 <= minutes_to_close < self.market_close_blackout_minutes:
                 logger.debug(f"Toxic window: {minutes_to_close:.1f}min to close")
                 return True
             
