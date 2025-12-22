@@ -68,6 +68,19 @@ class Backtester:
         self.slippage_bps = transaction_costs.get('slippage_bps', 5)
         self.spread_cost_model = transaction_costs.get('spread_cost_model', 'dynamic')
         self.short_borrow_rate_annual = transaction_costs.get('short_borrow_rate_annual', 0.003)  # 0.3% annual
+        
+        # Realistic fill simulation
+        fill_simulation = backtest_config.get('fill_simulation', {})
+        self.enable_partial_fills = fill_simulation.get('enable_partial_fills', True)
+        self.partial_fill_probability = fill_simulation.get('partial_fill_probability', 0.2)
+        self.min_partial_fill_pct = fill_simulation.get('min_partial_fill_pct', 0.5)
+        self.enable_queue_priority = fill_simulation.get('enable_queue_priority', True)
+        self.limit_order_fill_probability = fill_simulation.get('limit_order_fill_probability', 0.85)
+        
+        # Time-of-day adjustments
+        self.enable_tod_adjustments = fill_simulation.get('enable_tod_adjustments', True)
+        self.market_open_volatility_multiplier = fill_simulation.get('market_open_volatility_multiplier', 2.0)
+        self.market_close_volatility_multiplier = fill_simulation.get('market_close_volatility_multiplier', 1.5)
     
     def load_data(self, symbol: str, csv_path: str) -> pd.DataFrame:
         """
@@ -91,6 +104,109 @@ class Backtester:
         except Exception as e:
             logger.error(f"Error loading data from {csv_path}: {e}")
             return None
+    
+    def _get_tod_volatility_multiplier(self, timestamp: datetime) -> float:
+        """
+        Get time-of-day volatility multiplier for realistic spread/slippage simulation.
+        
+        Args:
+            timestamp: Bar timestamp
+            
+        Returns:
+            Volatility multiplier (1.0 = normal, >1.0 = higher volatility)
+        """
+        if not self.enable_tod_adjustments:
+            return 1.0
+        
+        # Market open/close hours have higher volatility
+        hour = timestamp.hour
+        minute = timestamp.minute
+        
+        # First 30 minutes after open (9:30-10:00 ET)
+        if hour == 9 and minute >= 30:
+            return self.market_open_volatility_multiplier
+        elif hour == 10 and minute < 30:
+            # Gradually reduce multiplier
+            return 1.0 + (self.market_open_volatility_multiplier - 1.0) * (30 - minute) / 30
+        
+        # Last 30 minutes before close (15:30-16:00 ET)
+        elif hour == 15 and minute >= 30:
+            # Gradually increase multiplier
+            return 1.0 + (self.market_close_volatility_multiplier - 1.0) * (minute - 30) / 30
+        elif hour >= 16:
+            return self.market_close_volatility_multiplier
+        
+        return 1.0
+    
+    def _simulate_limit_order_fill(
+        self,
+        bar: Bar,
+        limit_price: float,
+        is_buy: bool
+    ) -> tuple[bool, Optional[float]]:
+        """
+        Simulate whether a limit order would fill and at what price.
+        
+        Args:
+            bar: Market bar data
+            limit_price: Limit price
+            is_buy: True for buy order, False for sell order
+            
+        Returns:
+            Tuple of (filled, fill_price)
+        """
+        import random
+        
+        # Check if limit price is within bar's range
+        if is_buy:
+            if limit_price < bar.low:
+                return False, None  # Limit too low, no fill
+            elif limit_price >= bar.high:
+                # Would definitely fill, but at what price?
+                fill_price = min(limit_price, bar.close)
+                return True, fill_price
+        else:
+            if limit_price > bar.high:
+                return False, None  # Limit too high, no fill
+            elif limit_price <= bar.low:
+                # Would definitely fill
+                fill_price = max(limit_price, bar.close)
+                return True, fill_price
+        
+        # Price is within range - use queue priority simulation
+        if self.enable_queue_priority:
+            # Simulate queue position - limit orders have some probability of filling
+            if random.random() < self.limit_order_fill_probability:
+                # Filled - use limit price or better
+                fill_price = limit_price
+                return True, fill_price
+        
+        return False, None
+    
+    def _simulate_partial_fill(self, qty: int) -> int:
+        """
+        Simulate partial fill for an order.
+        
+        Args:
+            qty: Requested quantity
+            
+        Returns:
+            Actual filled quantity (may be partial)
+        """
+        import random
+        
+        if not self.enable_partial_fills:
+            return qty
+        
+        # Randomly decide if this order gets partial fill
+        if random.random() < self.partial_fill_probability:
+            # Partial fill - return percentage of requested quantity
+            fill_pct = self.min_partial_fill_pct + (1.0 - self.min_partial_fill_pct) * random.random()
+            partial_qty = max(1, int(qty * fill_pct))
+            logger.debug(f"Partial fill: {partial_qty}/{qty} ({fill_pct*100:.1f}%)")
+            return partial_qty
+        
+        return qty
     
     def run(self, data_by_symbol: Dict[str, pd.DataFrame]) -> None:
         """

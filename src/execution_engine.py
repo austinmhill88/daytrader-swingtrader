@@ -48,6 +48,11 @@ class ExecutionEngine:
         self.api_call_window_start = None
         self.max_api_calls_per_minute = config.get('max_api_calls_per_minute', 200)
         
+        # Toxic time window configuration
+        self.enable_toxic_time_filtering = config.get('enable_toxic_time_filtering', True)
+        self.market_open_blackout_minutes = config.get('market_open_blackout_minutes', 5)
+        self.market_close_blackout_minutes = config.get('market_close_blackout_minutes', 5)
+        
         # Rejection tracking
         from collections import deque
         from datetime import datetime, timedelta
@@ -61,11 +66,17 @@ class ExecutionEngine:
         # Alert notifier reference (will be set externally)
         self.notifier = None
         
+        # Order reconciliation tracking
+        self.pending_orders: Dict[str, Dict] = {}  # order_id -> {intent, timestamp, status}
+        self.order_check_interval = config.get('order_check_interval_seconds', 30)
+        self.stale_order_timeout = config.get('stale_order_timeout_seconds', 300)  # 5 minutes
+        
         logger.info(
             f"ExecutionEngine initialized | "
             f"Order type: {self.default_order_type}, "
             f"Bracket orders: {self.use_bracket_orders}, "
             f"Time slicing: {self.enable_time_slicing}, "
+            f"Toxic time filtering: {self.enable_toxic_time_filtering}, "
             f"Rate limit: {self.max_api_calls_per_minute} calls/min"
         )
     
@@ -445,9 +456,55 @@ class ExecutionEngine:
         
         return results
     
+    def _is_toxic_time_window(self) -> bool:
+        """
+        Check if current time is within toxic trading windows.
+        Toxic windows: first N minutes after open, last N minutes before close.
+        
+        Returns:
+            True if in toxic window, False otherwise
+        """
+        if not self.enable_toxic_time_filtering:
+            return False
+        
+        try:
+            clock = self.client.get_clock()
+            if not clock or not clock.is_open:
+                return True  # Market closed is toxic
+            
+            from datetime import datetime, timezone
+            import dateutil.parser
+            
+            # Parse times
+            now = datetime.now(timezone.utc)
+            market_open = dateutil.parser.parse(clock.next_open) if hasattr(clock, 'next_open') else None
+            market_close = dateutil.parser.parse(clock.next_close) if hasattr(clock, 'next_close') else None
+            
+            if not market_open or not market_close:
+                return False  # Can't determine, allow trading
+            
+            # Calculate minutes from open/close
+            minutes_from_open = (now - market_open).total_seconds() / 60
+            minutes_to_close = (market_close - now).total_seconds() / 60
+            
+            # Check if in blackout window
+            if minutes_from_open < self.market_open_blackout_minutes:
+                logger.debug(f"Toxic window: {minutes_from_open:.1f}min from open")
+                return True
+            
+            if minutes_to_close < self.market_close_blackout_minutes:
+                logger.debug(f"Toxic window: {minutes_to_close:.1f}min to close")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking toxic time window: {e}")
+            return False  # Allow trading on error
+    
     def execute_single_intent(self, intent: OrderIntent) -> Optional[any]:
         """
-        Execute a single order intent with rate limiting and fill logging.
+        Execute a single order intent with rate limiting, toxic time filtering, and fill logging.
         
         Args:
             intent: OrderIntent to execute
@@ -458,6 +515,14 @@ class ExecutionEngine:
         start_time = time.time()
         
         try:
+            # Check toxic time window
+            if self._is_toxic_time_window():
+                logger.warning(f"Order blocked for {intent.symbol}: toxic time window")
+                if self.prometheus:
+                    self.prometheus.record_order_rejected("toxic_time")
+                self._track_rejection("toxic_time")
+                return None
+            
             # Check rate limit
             if not self._check_rate_limit():
                 # Wait for rate limit to reset
@@ -524,6 +589,9 @@ class ExecutionEngine:
                         f"Stop: ${intent.bracket.get('stop_loss'):.2f}, "
                         f"TP: ${intent.bracket.get('take_profit'):.2f}"
                     )
+                
+                # Track order for reconciliation
+                self.track_order(order.id, intent)
                 
                 return order
             else:
@@ -702,3 +770,132 @@ class ExecutionEngine:
         except Exception as e:
             logger.error(f"Error cancelling orders: {e}")
             return False
+    
+    def track_order(self, order_id: str, intent: OrderIntent) -> None:
+        """
+        Track an order for reconciliation.
+        
+        Args:
+            order_id: Order ID from broker
+            intent: Original order intent
+        """
+        self.pending_orders[order_id] = {
+            'intent': intent,
+            'timestamp': datetime.now(),
+            'status': 'pending'
+        }
+        logger.debug(f"Tracking order {order_id} for {intent.symbol}")
+    
+    def reconcile_orders(self) -> None:
+        """
+        Reconcile pending orders - check status and handle stale orders.
+        Should be called periodically (e.g., every 30 seconds).
+        """
+        if not self.pending_orders:
+            return
+        
+        logger.debug(f"Reconciling {len(self.pending_orders)} pending orders")
+        
+        now = datetime.now()
+        stale_orders = []
+        
+        for order_id, order_data in list(self.pending_orders.items()):
+            try:
+                # Check if order is stale
+                age = (now - order_data['timestamp']).total_seconds()
+                
+                if age > self.stale_order_timeout:
+                    stale_orders.append(order_id)
+                    continue
+                
+                # Query order status from broker
+                orders = self.client.get_orders(status='all', limit=500)
+                order = next((o for o in orders if o.id == order_id), None)
+                
+                if not order:
+                    logger.warning(f"Order {order_id} not found in broker records")
+                    stale_orders.append(order_id)
+                    continue
+                
+                # Update status
+                status = getattr(order, 'status', 'unknown')
+                
+                if status in ['filled', 'canceled', 'expired', 'rejected']:
+                    # Order is complete, remove from tracking
+                    logger.info(
+                        f"Order {order_id} completed with status: {status} | "
+                        f"{order_data['intent'].symbol}"
+                    )
+                    del self.pending_orders[order_id]
+                    
+                    if status == 'filled':
+                        # Log successful fill
+                        log_trade(
+                            action="ORDER_FILLED",
+                            symbol=order_data['intent'].symbol,
+                            qty=order_data['intent'].qty,
+                            price=float(getattr(order, 'filled_avg_price', 0)),
+                            side=order_data['intent'].side.value,
+                            strategy=order_data['intent'].strategy_name,
+                            reason=order_data['intent'].reason,
+                            order_id=order_id
+                        )
+                        
+                        if self.prometheus:
+                            self.prometheus.record_order_filled(
+                                strategy=order_data['intent'].strategy_name or "unknown",
+                                side=order_data['intent'].side.value
+                            )
+                
+            except Exception as e:
+                logger.error(f"Error reconciling order {order_id}: {e}")
+        
+        # Handle stale orders
+        for order_id in stale_orders:
+            self._handle_stale_order(order_id)
+    
+    def _handle_stale_order(self, order_id: str) -> None:
+        """
+        Handle a stale order - cancel and optionally retry.
+        
+        Args:
+            order_id: Stale order ID
+        """
+        try:
+            order_data = self.pending_orders.get(order_id)
+            if not order_data:
+                return
+            
+            intent = order_data['intent']
+            age = (datetime.now() - order_data['timestamp']).total_seconds()
+            
+            logger.warning(
+                f"Stale order detected | {order_id} | {intent.symbol} | "
+                f"Age: {age:.0f}s"
+            )
+            
+            # Cancel the stale order
+            self.client.cancel_order(order_id)
+            
+            # Remove from tracking
+            del self.pending_orders[order_id]
+            
+            # Alert about stale order
+            if self.notifier:
+                self.notifier.send_alert(
+                    title="Stale Order Detected",
+                    message=f"Order {order_id} for {intent.symbol} was stale ({age:.0f}s) and cancelled",
+                    severity="warning",
+                    metadata={
+                        'order_id': order_id,
+                        'symbol': intent.symbol,
+                        'age_seconds': int(age)
+                    }
+                )
+            
+            # TODO: Implement retry logic based on strategy
+            # For now, just log and alert
+            logger.info(f"Stale order {order_id} cancelled (retry not implemented)")
+            
+        except Exception as e:
+            logger.error(f"Error handling stale order {order_id}: {e}")
