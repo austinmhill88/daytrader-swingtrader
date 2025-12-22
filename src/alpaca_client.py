@@ -41,7 +41,12 @@ class AlpacaClient:
         self.data_feed = data_feed
         self.reconnect_attempts = reconnect_attempts
         self.reconnect_delay = reconnect_delay
-        
+        self._earnings_cache = {
+            'window': None,
+            'fetched_at': None,
+            'data': {}
+        }
+         
         self._connect()
         logger.info(f"Alpaca client initialized: {base_url}")
     
@@ -526,83 +531,94 @@ class AlpacaClient:
     def has_upcoming_earnings(
         self,
         symbol: str,
-        days_ahead: int = 7
+        days_ahead: Optional[int] = None,
+        days_before: int = 2,
+        days_after: int = 1
     ) -> bool:
         """
-        Check if symbol has earnings announcement within specified days.
+        Check if symbol has an earnings announcement within the blackout window.
         
         Args:
             symbol: Stock symbol
-            days_ahead: Number of days to look ahead
+            days_ahead: Optional override for lookahead window (defaults to days_before + days_after)
+            days_before: Days before earnings to blackout
+            days_after: Days after earnings to blackout
             
         Returns:
-            True if earnings within timeframe, False otherwise
+            True if earnings within blackout window, False otherwise
             
         Note:
-            Integrates with Alpha Vantage for earnings calendar data.
-            Set ALPHA_VANTAGE_API_KEY environment variable to enable.
+            Integrates with Finnhub earnings calendar (free tier supported).
+            Set FINNHUB_API_KEY environment variable to enable.
+            Permissive on errors (returns False if provider unavailable).
         """
         try:
             import os
             import requests
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
             
-            # Check if Alpha Vantage API key is configured
-            api_key = os.environ.get('ALPHA_VANTAGE_API_KEY')
+            api_key = os.environ.get('FINNHUB_API_KEY')
             if not api_key:
-                logger.debug("ALPHA_VANTAGE_API_KEY not set, earnings check disabled")
+                logger.debug("FINNHUB_API_KEY not set, earnings check disabled")
                 return False
             
-            # Query Alpha Vantage earnings calendar
-            url = "https://www.alphavantage.co/query"
-            params = {
-                'function': 'EARNINGS_CALENDAR',
-                'symbol': symbol,
-                'horizon': '3month',
-                'apikey': api_key
-            }
+            today = datetime.now(timezone.utc).date()
+            lookahead = days_ahead if days_ahead is not None else (days_before + days_after)
+            from_date = (today - timedelta(days=days_after)).isoformat()
+            to_date = (today + timedelta(days=lookahead)).isoformat()
+            window_key = (from_date, to_date)
             
-            response = requests.get(url, params=params, timeout=5)
+            cache = self._earnings_cache
+            if cache and cache.get('window') == window_key and cache.get('fetched_at') == today:
+                earnings_date = cache.get('data', {}).get(symbol.upper())
+                if not earnings_date:
+                    return False
+                return (today - timedelta(days=days_after)) <= earnings_date <= (today + timedelta(days=days_before))
+            
+            response = requests.get(
+                "https://finnhub.io/api/v1/calendar/earnings",
+                params={'from': from_date, 'to': to_date, 'token': api_key},
+                timeout=8
+            )
+            
+            if response.status_code == 429:
+                logger.warning("Finnhub rate limit reached while checking earnings; defaulting to tradeable")
+                return False
+            
             response.raise_for_status()
+            payload = response.json() or {}
+            calendar = payload.get('earningsCalendar', [])
             
-            # Parse CSV response
-            import csv
-            from io import StringIO
-            
-            csv_data = StringIO(response.text)
-            reader = csv.DictReader(csv_data)
-            
-            # Check for earnings within the next days_ahead
-            today = datetime.now().date()
-            cutoff = today + timedelta(days=days_ahead)
-            
-            for row in reader:
-                if row.get('symbol') != symbol:
-                    continue
-                
-                # Parse report date
-                report_date_str = row.get('reportDate')
-                if not report_date_str:
+            earnings_map: Dict[str, Any] = {}
+            for event in calendar:
+                sym = (event.get('symbol') or '').upper()
+                date_str = event.get('date')
+                if not sym or not date_str:
                     continue
                 
                 try:
-                    report_date = datetime.strptime(report_date_str, '%Y-%m-%d').date()
-                    
-                    # Check if earnings is within our window
-                    if today <= report_date <= cutoff:
-                        logger.info(
-                            f"Earnings detected for {symbol} on {report_date_str} "
-                            f"(within {days_ahead} days)"
-                        )
-                        return True
+                    event_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
-                    logger.warning(f"Could not parse earnings date: {report_date_str}")
+                    logger.warning(f"Could not parse earnings date from Finnhub: {date_str}")
                     continue
+                
+                if sym not in earnings_map or event_date < earnings_map[sym]:
+                    earnings_map[sym] = event_date
             
-            return False
+            self._earnings_cache = {
+                'window': window_key,
+                'fetched_at': today,
+                'data': earnings_map
+            }
+            
+            earnings_date = earnings_map.get(symbol.upper())
+            if not earnings_date:
+                return False
+            
+            return (today - timedelta(days=days_after)) <= earnings_date <= (today + timedelta(days=days_before))
             
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Error querying earnings calendar for {symbol}: {e}")
+            logger.warning(f"Error querying Finnhub earnings calendar for {symbol}: {e}")
             return False
         except Exception as e:
             logger.warning(f"Error checking earnings for {symbol}: {e}")
