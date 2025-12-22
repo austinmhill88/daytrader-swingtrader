@@ -157,6 +157,7 @@ backtesting:
     commission_per_share: 0.0  # Alpaca has zero commission
     spread_cost_model: "dynamic"  # dynamic, fixed
     slippage_bps: 5
+    short_borrow_rate_annual: 0.003  # 0.3% annual rate for short positions
   # Phase 2: Overfitting prevention
   enable_purged_cv: false
   embargo_pct: 0.01
