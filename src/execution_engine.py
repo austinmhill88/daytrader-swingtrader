@@ -2,6 +2,8 @@
 Order execution engine with position sizing and bracket order support.
 """
 import math
+import time
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from loguru import logger
 
@@ -284,8 +286,6 @@ class ExecutionEngine:
         Returns:
             True if we can make the call, False if rate limited
         """
-        import time
-        from datetime import datetime, timedelta
         
         now = datetime.now()
         
@@ -316,8 +316,6 @@ class ExecutionEngine:
         Returns:
             True if wait successful, False if timed out
         """
-        import time
-        from datetime import datetime
         
         if self.api_call_window_start is None:
             return True
@@ -416,7 +414,6 @@ class ExecutionEngine:
                     
                     # Small delay between child orders
                     if len(child_orders) > 1:
-                        import time
                         time.sleep(1)
                         
             except Exception as e:
@@ -526,7 +523,6 @@ class ExecutionEngine:
         Returns:
             Order object or None
         """
-        import time
         
         for attempt in range(max_retries):
             try:

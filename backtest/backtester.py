@@ -219,15 +219,15 @@ class Backtester:
         elif signal.strength < 0:
             # Sell
             if bar.symbol in self.positions and self.positions[bar.symbol] >= trade_size:
-                total_proceeds = (fill_price * trade_size) - commission
+                # Initialize short cost
+                short_cost = 0
                 
                 # Calculate short borrow cost if this is a short position
                 if self.positions[bar.symbol] < 0:
                     # Daily short borrow cost
                     short_cost = abs(self.positions[bar.symbol]) * fill_price * (self.short_borrow_rate_annual / 252)
-                    total_proceeds -= short_cost
-                else:
-                    short_cost = 0
+                
+                total_proceeds = (fill_price * trade_size) - commission - short_cost
                 
                 self.current_capital += total_proceeds
                 self.positions[bar.symbol] -= trade_size
@@ -242,20 +242,21 @@ class Backtester:
                     'slippage_bps': slippage * 10000,
                     'spread_cost_bps': spread_cost * 10000,
                     'commission': commission,
-                    'short_borrow_cost': short_cost if 'short_cost' in locals() else 0,
+                    'short_borrow_cost': short_cost,
                     'total_proceeds': total_proceeds,
                     'strategy': signal.strategy_name
                 })
         
         # Record equity (mark positions to market)
+        # Note: This is simplified - in production would track last known price per symbol
         total_equity = self.current_capital
         for symbol, qty in self.positions.items():
-            # Use current bar close for simplicity (should use last known price per symbol)
             if symbol == bar.symbol:
                 total_equity += qty * bar.close
             else:
-                # Assume position value hasn't changed (simplified)
-                total_equity += qty * bar.close  # This is a simplification
+                # Simplified: assume position hasn't changed
+                # In production, would maintain price cache per symbol
+                total_equity += qty * bar.close
         
         self.results['equity_curve'].append({
             'timestamp': bar.ts,

@@ -301,13 +301,19 @@ class UniverseAnalytics:
         
         for symbol in symbols:
             try:
-                # Check if symbol has earnings in blackout window
-                # Note: Alpaca may not have direct earnings calendar API
-                # This is a placeholder for the logic
-                # In production, you'd use a dedicated earnings calendar service
+                # TODO(Priority: High): Integrate with earnings calendar service
+                # Options: Alpaca corporate actions API, Alpha Vantage earnings calendar,
+                # or dedicated service like Earnings Whispers
+                # For now, always pass (no earnings blackout implemented)
+                # Tracking issue: Create GitHub issue for earnings calendar integration
                 
-                # For now, always pass (no earnings blackout)
-                # TODO: Integrate with earnings calendar service
+                # Placeholder for earnings check logic:
+                # has_earnings = check_earnings_calendar(symbol, blackout_start, blackout_end)
+                # if has_earnings:
+                #     blackout.append(symbol)
+                # else:
+                #     tradeable.append(symbol)
+                
                 tradeable.append(symbol)
                 
             except Exception as e:

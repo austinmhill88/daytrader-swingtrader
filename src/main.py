@@ -5,6 +5,7 @@ import argparse
 import signal
 import sys
 import time
+import pandas as pd
 from datetime import datetime, time as dtime
 from typing import List, Dict, Optional
 from loguru import logger
@@ -282,7 +283,6 @@ class TradingBot:
                                     limit=100
                                 )
                                 if bars_df is not None and len(bars_df) > 0:
-                                    import pandas as pd
                                     df = pd.DataFrame({
                                         'close': [float(b.close) for b in bars_df],
                                         'high': [float(b.high) for b in bars_df],
