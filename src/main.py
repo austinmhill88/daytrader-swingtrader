@@ -402,7 +402,7 @@ class TradingBot:
                     # Update Prometheus metrics
                     self.prometheus.update_portfolio_metrics(
                         equity=self.portfolio.equity(),
-                        cash=self.portfolio.cash,
+                        cash=self.portfolio.cash(),
                         positions_value=self.portfolio.positions_value(),
                         daily_pnl=self.portfolio.daily_pnl,
                         daily_pnl_pct=self.portfolio.daily_pnl_pct

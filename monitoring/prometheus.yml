@@ -64,11 +64,18 @@ scrape_configs:
 # Storage configuration
 # By default, Prometheus stores data in ./data directory
 # Adjust retention time based on your needs
-storage:
-  tsdb:
-    path: /prometheus/data
-    retention.time: 30d  # Keep 30 days of metrics data
-    retention.size: 10GB  # Or 10GB, whichever comes first
+# NOTE: The following settings should be passed as Prometheus command-line flags:
+#   --storage.tsdb.path=/prometheus/data
+#   --storage.tsdb.retention.time=30d
+#   --storage.tsdb.retention.size=10GB
+# Example Docker command:
+#   docker run -p 9090:9090 \
+#     -v /path/to/prometheus.yml:/etc/prometheus/prometheus.yml \
+#     prom/prometheus \
+#     --config.file=/etc/prometheus/prometheus.yml \
+#     --storage.tsdb.path=/prometheus/data \
+#     --storage.tsdb.retention.time=30d \
+#     --storage.tsdb.retention.size=10GB
 
 # Web configuration
 # Configure web UI and API

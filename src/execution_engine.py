@@ -184,9 +184,11 @@ class ExecutionEngine:
             reason=signal.reason
         )
         
+        # Format price string based on order type
+        price_str = f"${limit_price:.2f}" if limit_price is not None else "MARKET"
         logger.info(
             f"Order intent created | {intent.side.value.upper()} {intent.qty} {intent.symbol} "
-            f"@ ${limit_price:.2f} | Strategy: {signal.strategy_name}"
+            f"@ {price_str} | Strategy: {signal.strategy_name}"
         )
         
         return intent

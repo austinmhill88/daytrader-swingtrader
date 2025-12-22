@@ -332,7 +332,7 @@ class TradingSystem:
         if self.portfolio:
             status['portfolio'] = {
                 'equity': self.portfolio.equity(),
-                'cash': self.portfolio.cash,
+                'cash': self.portfolio.cash(),
                 'positions': self.portfolio.position_count(),
                 'daily_pnl': self.portfolio.daily_pnl(),
                 'daily_pnl_pct': self.portfolio.daily_pnl_pct()
