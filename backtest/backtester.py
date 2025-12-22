@@ -3,6 +3,7 @@ Simple backtesting framework for strategy validation.
 """
 import argparse
 import pandas as pd
+import random
 from datetime import datetime, timedelta
 from loguru import logger
 from typing import Dict, List
@@ -155,8 +156,6 @@ class Backtester:
         Returns:
             Tuple of (filled, fill_price)
         """
-        import random
-        
         # Check if limit price is within bar's range
         if is_buy:
             if limit_price < bar.low:
@@ -193,8 +192,6 @@ class Backtester:
         Returns:
             Actual filled quantity (may be partial)
         """
-        import random
-        
         if not self.enable_partial_fills:
             return qty
         
