@@ -460,6 +460,7 @@ class ExecutionEngine:
         """
         Check if current time is within toxic trading windows.
         Toxic windows: first N minutes after open, last N minutes before close.
+        Uses configured session times from config rather than Alpaca clock API.
         
         Returns:
             True if in toxic window, False otherwise
@@ -472,23 +473,36 @@ class ExecutionEngine:
             if not clock or not clock.is_open:
                 return True  # Market closed is toxic
             
-            from datetime import datetime, timezone
-            import dateutil.parser
+            from datetime import datetime, time
+            import pytz
             
-            # Parse times
-            now = datetime.now(timezone.utc)
+            # Get current time in market timezone (America/New_York)
+            market_tz = pytz.timezone('America/New_York')
+            now = datetime.now(market_tz)
             
-            # Use the current session's open/close times
-            # clock.next_open is next session if market is open, so use timestamp to determine today's session
-            # For Alpaca, when market is open, we need to calculate from the current session
-            market_close = dateutil.parser.parse(clock.next_close) if hasattr(clock, 'next_close') else None
+            # Get session times from config (if available, otherwise use defaults)
+            # Config should have been passed to ExecutionEngine
+            session_config = self.config.get('session', {})
+            market_open_str = session_config.get('market_open', '09:30')
+            market_close_str = session_config.get('market_close', '16:00')
             
-            if not market_close:
-                return False  # Can't determine, allow trading
+            # Parse market open/close times
+            market_open_time = time.fromisoformat(market_open_str)
+            market_close_time = time.fromisoformat(market_close_str)
             
-            # Calculate market open time from close (market open is 6.5 hours before close for US markets)
-            from datetime import timedelta
-            market_open = market_close - timedelta(hours=6, minutes=30)
+            # Create datetime objects for today's open and close
+            market_open = now.replace(
+                hour=market_open_time.hour,
+                minute=market_open_time.minute,
+                second=0,
+                microsecond=0
+            )
+            market_close = now.replace(
+                hour=market_close_time.hour,
+                minute=market_close_time.minute,
+                second=0,
+                microsecond=0
+            )
             
             # Calculate minutes from open/close
             minutes_from_open = (now - market_open).total_seconds() / 60
