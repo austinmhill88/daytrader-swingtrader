@@ -76,6 +76,8 @@ Set these environment variables in `.env`:
 APCA_API_KEY_ID=your_key_id_here
 APCA_API_SECRET_KEY=your_secret_key_here
 APCA_API_BASE_URL=https://paper-api.alpaca.markets
+# Optional: Finnhub for earnings blackout calendar
+FINNHUB_API_KEY=your_finnhub_key_here
 ```
 
 ### 3. Paper Trading (REQUIRED)

@@ -9,15 +9,17 @@ alpaca:
   reconnect_delay: 10  # seconds
 
 # Phase 1: Multi-source data configuration
-data_sources:
-  primary: "alpaca"  # alpaca, polygon, tiingo, iex
-  secondary: []  # fallback sources
-  polygon:
-    api_key: ${POLYGON_API_KEY}
-  tiingo:
-    api_key: ${TIINGO_API_KEY}
-  iex:
-    api_key: ${IEX_API_KEY}
+  data_sources:
+    primary: "alpaca"  # alpaca, polygon, tiingo, iex
+    secondary: []  # fallback sources
+    polygon:
+      api_key: ${POLYGON_API_KEY}
+    tiingo:
+      api_key: ${TIINGO_API_KEY}
+    iex:
+      api_key: ${IEX_API_KEY}
+    finnhub:
+      api_key: ${FINNHUB_API_KEY}
 
 # Phase 1: Data storage configuration
 data_storage:
@@ -54,6 +56,11 @@ universe:
     - META
     - SPY
     - QQQ
+  earnings_blackout:
+    enabled: true
+    days_before: 2
+    days_after: 1
+    lookahead_days: 14  # calendar fetch range (today +/- window)
 
 strategies:
   intraday_mean_reversion:

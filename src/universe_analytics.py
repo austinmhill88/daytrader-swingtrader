@@ -5,7 +5,6 @@ Dynamic universe building based on liquidity and quality metrics.
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime, timedelta
 from loguru import logger
 
 
@@ -40,6 +39,15 @@ class UniverseAnalytics:
         self.enable_liquidity_scoring = analytics.get('enable_liquidity_scoring', True)
         self.enable_volatility_bucketing = analytics.get('enable_volatility_bucketing', True)
         self.min_adv_usd = analytics.get('min_adv_usd', 1000000)
+        
+        earnings_cfg = universe_config.get('earnings_blackout', {})
+        self.earnings_blackout_enabled = earnings_cfg.get('enabled', True)
+        self.earnings_blackout_days_before = earnings_cfg.get('days_before', 2)
+        self.earnings_blackout_days_after = earnings_cfg.get('days_after', 1)
+        self.earnings_blackout_lookahead = earnings_cfg.get(
+            'lookahead_days',
+            self.earnings_blackout_days_before + self.earnings_blackout_days_after
+        )
         
         logger.info(
             f"UniverseAnalytics initialized | "
@@ -270,8 +278,9 @@ class UniverseAnalytics:
         self,
         symbols: List[str],
         alpaca_client=None,
-        blackout_days_before: int = 2,
-        blackout_days_after: int = 1
+        blackout_days_before: Optional[int] = None,
+        blackout_days_after: Optional[int] = None,
+        lookahead_days: Optional[int] = None
     ) -> Tuple[List[str], List[str]]:
         """
         Filter out symbols in earnings blackout period.
@@ -281,6 +290,7 @@ class UniverseAnalytics:
             alpaca_client: AlpacaClient instance for earnings calendar
             blackout_days_before: Days before earnings to blackout
             blackout_days_after: Days after earnings to blackout
+            lookahead_days: Optional explicit lookahead window
             
         Returns:
             Tuple of (tradeable_symbols, blackout_symbols)
@@ -290,20 +300,23 @@ class UniverseAnalytics:
             logger.warning("No Alpaca client provided for earnings blackout check")
             return symbols, []
         
+        blackout_days_before = blackout_days_before if blackout_days_before is not None else self.earnings_blackout_days_before
+        blackout_days_after = blackout_days_after if blackout_days_after is not None else self.earnings_blackout_days_after
+        total_days = lookahead_days if lookahead_days is not None else (blackout_days_before + blackout_days_after)
+        
         
         tradeable = []
         blackout = []
         
-        today = datetime.now().date()
-        blackout_start = today - timedelta(days=blackout_days_before)
-        blackout_end = today + timedelta(days=blackout_days_after)
-        
         for symbol in symbols:
             try:
                 # Check if symbol has earnings within blackout window
-                # Using total blackout window (before + after)
-                total_days = blackout_days_before + blackout_days_after
-                has_earnings = alpaca_client.has_upcoming_earnings(symbol, days_ahead=total_days)
+                has_earnings = alpaca_client.has_upcoming_earnings(
+                    symbol,
+                    days_ahead=total_days,
+                    days_before=blackout_days_before,
+                    days_after=blackout_days_after
+                )
                 
                 if has_earnings:
                     blackout.append(symbol)
@@ -398,9 +411,14 @@ class UniverseAnalytics:
         base_universe = self.build_universe(symbol_data, tier)
         
         # Apply earnings filter
-        if apply_earnings_filter and alpaca_client:
+        earnings_filter_enabled = apply_earnings_filter and self.earnings_blackout_enabled
+        if earnings_filter_enabled and alpaca_client:
             tradeable, blackout = self.filter_earnings_blackout(
-                base_universe, alpaca_client
+                base_universe,
+                alpaca_client,
+                blackout_days_before=self.earnings_blackout_days_before,
+                blackout_days_after=self.earnings_blackout_days_after,
+                lookahead_days=self.earnings_blackout_lookahead
             )
         else:
             tradeable = base_universe

@@ -174,18 +174,11 @@ logger.info(f"Order intent created | ... @ {price_str} ...")
 ---
 
 ### 8. Earnings Blackout Filter
-**Status:** TODO placeholder in code
+**Status:** Implemented with Finnhub earnings calendar
 
-**Location:** `src/universe_analytics.py` lines 288-329
+**Location:** `src/universe_analytics.py` and `src/alpaca_client.py`
 
-**Current State:** Method exists but always passes symbols (no earnings calendar integration)
-
-**To Implement:**
-- Integrate with earnings calendar service (Alpaca corporate actions API, Alpha Vantage, or Earnings Whispers)
-- Check if symbol has earnings within blackout window (2 days before, 1 day after)
-- Filter out symbols in earnings blackout period
-
-**Priority:** High (as noted in code comments)
+**Current State:** Config-driven blackout (default 2 days before, 1 day after) using Finnhub earnings calendar with per-session caching. Disabled if `FINNHUB_API_KEY` is not set.
 
 ---
 
@@ -198,6 +191,9 @@ Set in CI/CD secrets and local `.env`:
 APCA_API_KEY_ID=your_key_id
 APCA_API_SECRET_KEY=your_secret_key
 APCA_API_BASE_URL=https://paper-api.alpaca.markets  # or live
+
+# Earnings calendar (Finnhub)
+FINNHUB_API_KEY=your_finnhub_key
 
 # Alerts (optional)
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL

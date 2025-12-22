@@ -385,7 +385,7 @@ universe:
     enabled: true
     days_before: 2
     days_after: 1
-    calendar_source: "polygon"  # polygon, yahoo, earnings_whispers
+    calendar_source: "finnhub"  # finnhub (default, free tier), polygon, yahoo
   
   exclusions:
     exclude_ipos_days: 30
@@ -415,7 +415,7 @@ universe:
 - [ ] Implement spread calculation (20-day rolling)
 - [ ] Implement tier assignment logic (Core 200, Extended 1000)
 - [ ] Integrate shortability API (Alpaca Locate)
-- [ ] Integrate earnings calendar API (Polygon or Yahoo)
+- [ ] Integrate earnings calendar API (Finnhub default; optional Polygon/Yahoo)
 - [ ] Implement earnings blackout logic
 - [ ] Implement daily universe refresh (pre-market)
 - [ ] Implement weekly tier refresh
