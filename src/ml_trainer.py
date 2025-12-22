@@ -1,6 +1,7 @@
 """
 ML model training with overfitting prevention (Phase 2).
 Implements purged k-fold CV, walk-forward validation, and promotion gates.
+MLflow integration for model registry and lineage tracking.
 """
 import pandas as pd
 import numpy as np
@@ -20,6 +21,16 @@ try:
 except ImportError:
     ML_AVAILABLE = False
     logger.warning("ML libraries not available")
+
+try:
+    import mlflow
+    import mlflow.sklearn
+    import mlflow.lightgbm
+    import mlflow.xgboost
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+    logger.warning("MLflow not available - model tracking disabled")
 
 
 class PurgedTimeSeriesSplit:
@@ -104,9 +115,21 @@ class MLModelTrainer:
         self.enable_purged_cv = bt_config.get('enable_purged_cv', False)
         self.embargo_pct = bt_config.get('embargo_pct', 0.01)
         
+        # MLflow configuration
+        mlflow_config = ml_config.get('mlflow', {})
+        self.enable_mlflow = mlflow_config.get('enabled', False) and MLFLOW_AVAILABLE
+        self.mlflow_tracking_uri = mlflow_config.get('tracking_uri', './data/mlruns')
+        self.mlflow_experiment_name = mlflow_config.get('experiment_name', 'trading_models')
+        
+        if self.enable_mlflow:
+            mlflow.set_tracking_uri(self.mlflow_tracking_uri)
+            mlflow.set_experiment(self.mlflow_experiment_name)
+            logger.info(f"MLflow enabled | Tracking URI: {self.mlflow_tracking_uri}")
+        
         logger.info(
             f"MLModelTrainer initialized | "
-            f"Enabled: {self.enabled}, Method: {self.validation_method}"
+            f"Enabled: {self.enabled}, Method: {self.validation_method}, "
+            f"MLflow: {self.enable_mlflow}"
         )
     
     def train_model(
@@ -385,3 +408,180 @@ class MLModelTrainer:
             logger.warning(f"✗ Model failed promotion gates: {', '.join(failed_gates)}")
         
         return passed, failed_gates
+    
+    def save_model_to_registry(
+        self,
+        model: Any,
+        model_name: str,
+        strategy: str,
+        metrics: Dict[str, float],
+        params: Dict[str, Any],
+        model_type: str = 'lightgbm'
+    ) -> Optional[str]:
+        """
+        Save model to MLflow registry with metadata and lineage.
+        
+        Args:
+            model: Trained model
+            model_name: Name for the model
+            strategy: Strategy name
+            metrics: Model metrics
+            params: Model parameters
+            model_type: Model type
+            
+        Returns:
+            Model version string or None
+        """
+        if not self.enable_mlflow:
+            # Fallback to local filesystem
+            model_path = self.model_dir / f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+            joblib.dump(model, model_path)
+            logger.info(f"Model saved locally to {model_path}")
+            return str(model_path)
+        
+        try:
+            with mlflow.start_run(run_name=f"{strategy}_{model_name}"):
+                # Log parameters
+                mlflow.log_params(params)
+                
+                # Log metrics
+                mlflow.log_metrics(metrics)
+                
+                # Log metadata
+                mlflow.set_tag("strategy", strategy)
+                mlflow.set_tag("model_type", model_type)
+                mlflow.set_tag("trained_at", datetime.now().isoformat())
+                
+                # Log promotion gate results
+                passed, failed_gates = self.check_promotion_gates(metrics)
+                mlflow.set_tag("promotion_passed", str(passed))
+                if failed_gates:
+                    mlflow.set_tag("failed_gates", ", ".join(failed_gates))
+                
+                # Save model to registry
+                if model_type == 'lightgbm':
+                    model_info = mlflow.lightgbm.log_model(
+                        model,
+                        "model",
+                        registered_model_name=model_name
+                    )
+                elif model_type == 'xgboost':
+                    model_info = mlflow.xgboost.log_model(
+                        model,
+                        "model",
+                        registered_model_name=model_name
+                    )
+                else:
+                    model_info = mlflow.sklearn.log_model(
+                        model,
+                        "model",
+                        registered_model_name=model_name
+                    )
+                
+                run_id = mlflow.active_run().info.run_id
+                logger.info(
+                    f"Model saved to MLflow registry | "
+                    f"Name: {model_name}, Run ID: {run_id}, "
+                    f"Promotion: {'PASSED' if passed else 'FAILED'}"
+                )
+                
+                return run_id
+                
+        except Exception as e:
+            logger.error(f"Error saving model to MLflow: {e}")
+            return None
+    
+    def load_model_from_registry(
+        self,
+        model_name: str,
+        version: Optional[str] = None,
+        stage: str = "Production"
+    ) -> Optional[Any]:
+        """
+        Load model from MLflow registry.
+        
+        Args:
+            model_name: Registered model name
+            version: Specific version to load (None for latest)
+            stage: Model stage ("Production", "Staging", "None")
+            
+        Returns:
+            Loaded model or None
+        """
+        if not self.enable_mlflow:
+            logger.warning("MLflow not enabled, cannot load from registry")
+            return None
+        
+        try:
+            if version:
+                model_uri = f"models:/{model_name}/{version}"
+            else:
+                model_uri = f"models:/{model_name}/{stage}"
+            
+            model = mlflow.pyfunc.load_model(model_uri)
+            logger.info(f"Loaded model from registry: {model_uri}")
+            return model
+            
+        except Exception as e:
+            logger.error(f"Error loading model from registry: {e}")
+            return None
+    
+    def promote_model(
+        self,
+        model_name: str,
+        version: str,
+        stage: str = "Production"
+    ) -> bool:
+        """
+        Promote a model version to a specific stage.
+        
+        Args:
+            model_name: Model name
+            version: Version to promote
+            stage: Target stage ("Production", "Staging", "Archived")
+            
+        Returns:
+            True if successful
+        """
+        if not self.enable_mlflow:
+            logger.warning("MLflow not enabled, cannot promote model")
+            return False
+        
+        try:
+            from mlflow.tracking import MlflowClient
+            client = MlflowClient()
+            
+            # Transition model version to new stage
+            client.transition_model_version_stage(
+                name=model_name,
+                version=version,
+                stage=stage,
+                archive_existing_versions=(stage == "Production")
+            )
+            
+            logger.info(
+                f"Model promoted | "
+                f"Name: {model_name}, Version: {version}, Stage: {stage}"
+            )
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error promoting model: {e}")
+            return False
+    
+    def demote_model(
+        self,
+        model_name: str,
+        version: str
+    ) -> bool:
+        """
+        Demote a model version to Archived stage.
+        
+        Args:
+            model_name: Model name
+            version: Version to demote
+            
+        Returns:
+            True if successful
+        """
+        return self.promote_model(model_name, version, stage="Archived")
