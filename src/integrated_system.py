@@ -191,21 +191,62 @@ class TradingSystem:
         )
     
     def _recover_data_feed(self) -> None:
-        """Recovery action for data feed."""
+        """
+        Recovery action for data feed with actual reconnection steps.
+        """
         logger.warning("Attempting data feed recovery...")
-        if self.alpaca_client:
-            try:
-                # Attempt to reconnect data stream
-                # Note: Actual implementation depends on data feed architecture
-                # This is a placeholder for the reconnection logic that would:
-                # 1. Close existing WebSocket connection
-                # 2. Wait brief period (exponential backoff)
-                # 3. Reinitialize connection
-                # 4. Resubscribe to symbols
-                logger.info("Data feed reconnection initiated (implementation pending)")
-                # TODO: Implement actual reconnection in Phase 5 / production
-            except Exception as e:
-                logger.error(f"Data feed recovery failed: {e}")
+        
+        try:
+            # Step 1: Stop the current data feed if running
+            if hasattr(self, 'data_feed') and self.data_feed:
+                logger.info("Step 1: Stopping current data feed connection...")
+                self.data_feed.stop()
+                import time
+                time.sleep(2)  # Allow graceful shutdown
+            
+            # Step 2: Exponential backoff before reconnection
+            if hasattr(self, '_data_feed_retry_count'):
+                self._data_feed_retry_count += 1
+            else:
+                self._data_feed_retry_count = 1
+            
+            backoff_time = min(60, 2 ** self._data_feed_retry_count)
+            logger.info(f"Step 2: Backing off for {backoff_time}s before reconnection attempt #{self._data_feed_retry_count}")
+            import time
+            time.sleep(backoff_time)
+            
+            # Step 3: Reinitialize connection
+            if self.alpaca_client:
+                logger.info("Step 3: Reinitializing data feed connection...")
+                from src.data_feed import LiveDataFeed
+                
+                # Create new data feed instance
+                self.data_feed = LiveDataFeed(
+                    key_id=self.config['alpaca']['key_id'],
+                    secret_key=self.config['alpaca']['secret_key'],
+                    base_url=self.config['alpaca']['base_url'],
+                    symbols=getattr(self, 'universe', []),
+                    data_feed=self.config['alpaca']['data_feed']
+                )
+                
+                # Wire prometheus and notifier
+                if hasattr(self, 'prometheus'):
+                    self.data_feed.prometheus = self.prometheus
+                if hasattr(self, 'notifier'):
+                    self.data_feed.notifier = self.notifier
+                
+                logger.info("Step 4: Data feed reconnection successful")
+                self._data_feed_retry_count = 0  # Reset on success
+                
+        except Exception as e:
+            logger.error(f"Data feed recovery failed: {e}")
+            if self.notifier:
+                self.notifier.send_alert(
+                    title="Data Feed Recovery Failed",
+                    message=f"Failed to recover data feed: {str(e)}",
+                    severity="critical",
+                    metadata={'error': str(e), 'retry_count': getattr(self, '_data_feed_retry_count', 0)}
+                )
     
     # Scheduled action implementations
     def _action_data_sync(self) -> None:

@@ -42,6 +42,11 @@ class LiveDataFeed:
         self.is_running = False
         self.reconnect_count = 0
         self.max_reconnects = 10
+        self.disconnect_start_time = None
+        
+        # External references (will be set externally)
+        self.prometheus = None
+        self.notifier = None
         
         logger.info(f"LiveDataFeed initialized for {len(symbols)} symbols")
     
@@ -97,16 +102,40 @@ class LiveDataFeed:
             error: Exception that occurred
         """
         logger.error(f"Data stream error: {error}")
+        
+        # Track disconnect time
+        if self.disconnect_start_time is None:
+            self.disconnect_start_time = datetime.now()
+            
+            # Record disconnect metrics
+            if self.prometheus:
+                self.prometheus.record_stream_disconnect()
+        
         self.reconnect_count += 1
         
         if self.reconnect_count < self.max_reconnects:
             wait_time = min(60, 2 ** self.reconnect_count)
             logger.info(f"Attempting reconnection #{self.reconnect_count} in {wait_time}s")
+            
+            # Send disconnect alert
+            if self.notifier and self.disconnect_start_time:
+                disconnect_seconds = int((datetime.now() - self.disconnect_start_time).total_seconds())
+                self.notifier.send_stream_disconnect_alert(disconnect_seconds)
+            
             await asyncio.sleep(wait_time)
             # Connection will be re-established by run() loop
         else:
             logger.critical("Max reconnection attempts reached. Manual intervention required.")
             self.is_running = False
+            
+            # Send critical alert for max reconnections
+            if self.notifier:
+                self.notifier.send_alert(
+                    title="🚨 Data Stream Failure",
+                    message=f"Max reconnection attempts ({self.max_reconnects}) reached. Manual intervention required.",
+                    severity="critical",
+                    metadata={'reconnect_count': self.reconnect_count}
+                )
     
     async def run_async(self) -> None:
         """
@@ -128,6 +157,14 @@ class LiveDataFeed:
                     stream.subscribe_bars(self._on_bar, symbol)
                 
                 logger.info(f"Starting data stream for {len(self.symbols)} symbols")
+                
+                # Reset disconnect tracking on successful connection
+                if self.disconnect_start_time:
+                    disconnect_duration = int((datetime.now() - self.disconnect_start_time).total_seconds())
+                    logger.info(f"Stream reconnected after {disconnect_duration}s")
+                    self.disconnect_start_time = None
+                    self.reconnect_count = 0  # Reset counter on successful connection
+                
                 await stream._run_forever()
                 
                 # If we reach here, connection was closed
