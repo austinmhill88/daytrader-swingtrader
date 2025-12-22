@@ -149,7 +149,7 @@ class TradingBot:
                 tier='core',
                 alpaca_client=self.client,
                 apply_earnings_filter=True,
-                apply_shortability_filter=False,
+                apply_shortability_filter=True,
                 previous_universe=previous_universe
             )
             
@@ -330,6 +330,7 @@ class TradingBot:
         
         poll_interval = 60  # Poll every 60 seconds
         last_eod_run = None
+        last_reconciliation = None
         
         while self.is_running:
             try:
@@ -343,6 +344,14 @@ class TradingBot:
                 
                 # Update portfolio
                 self.portfolio.update()
+                
+                # Reconcile pending orders (every 30 seconds)
+                if last_reconciliation is None or (current_time - last_reconciliation).total_seconds() >= 30:
+                    try:
+                        self.execution_engine.reconcile_orders()
+                        last_reconciliation = current_time
+                    except Exception as e:
+                        logger.error(f"Error reconciling orders: {e}")
                 
                 # Update regime detector with market data (every 5 minutes)
                 if current_time.minute % 5 == 0:
@@ -413,12 +422,14 @@ class TradingBot:
                     self.risk_manager.log_risk_summary()
                     
                     # Update Prometheus metrics
+                    # Calculate positions value from equity - cash
+                    positions_value = self.portfolio.equity() - self.portfolio.cash()
                     self.prometheus.update_portfolio_metrics(
                         equity=self.portfolio.equity(),
                         cash=self.portfolio.cash(),
-                        positions_value=self.portfolio.positions_value(),
-                        daily_pnl=self.portfolio.daily_pnl,
-                        daily_pnl_pct=self.portfolio.daily_pnl_pct
+                        positions_value=positions_value,
+                        daily_pnl=self.portfolio.daily_pnl(),
+                        daily_pnl_pct=self.portfolio.daily_pnl_pct()
                     )
                     
                     exposure = self.portfolio.calculate_exposure()
@@ -429,31 +440,32 @@ class TradingBot:
                         short_exposure=exposure['short']
                     )
                     
-                    num_positions = len(self.portfolio.positions)
-                    num_long = sum(1 for p in self.portfolio.positions.values() if p.side == 'long')
+                    positions_list = self.portfolio.positions()
+                    num_positions = len(positions_list)
+                    num_long = sum(1 for p in positions_list if p.side == 'long')
                     num_short = num_positions - num_long
                     self.prometheus.update_position_metrics(num_positions, num_long, num_short)
                     
                     # Check for alert conditions
                     # Daily P&L threshold alert
-                    if abs(self.portfolio.daily_pnl_pct) >= self.alert_on_daily_pnl_threshold:
+                    if abs(self.portfolio.daily_pnl_pct()) >= self.alert_on_daily_pnl_threshold:
                         self.notifier.send_daily_pnl_alert(
-                            self.portfolio.daily_pnl_pct,
-                            self.portfolio.daily_pnl
+                            self.portfolio.daily_pnl_pct(),
+                            self.portfolio.daily_pnl()
                         )
                     
                     # Kill-switch status
                     kill_switch_active = self.risk_manager.is_kill_switch_active()
                     self.prometheus.update_risk_metrics(
                         kill_switch_active=kill_switch_active,
-                        daily_drawdown_pct=self.portfolio.daily_drawdown_pct,
+                        daily_drawdown_pct=self.portfolio.daily_drawdown_pct(),
                         max_drawdown_pct=0.0  # Would need to track this
                     )
                     
                     if kill_switch_active:
                         self.notifier.send_kill_switch_alert(
-                            reason=f"Daily drawdown: {self.portfolio.daily_drawdown_pct:.2f}%",
-                            drawdown_pct=self.portfolio.daily_drawdown_pct
+                            reason=f"Daily drawdown: {self.portfolio.daily_drawdown_pct():.2f}%",
+                            drawdown_pct=self.portfolio.daily_drawdown_pct()
                         )
                     
                     # Log regime status
