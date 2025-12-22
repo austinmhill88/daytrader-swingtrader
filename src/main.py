@@ -75,8 +75,9 @@ class TradingBot:
         if self.prometheus.enabled:
             self.prometheus.start()
         
-        # Link prometheus to execution engine and notifier to risk manager
+        # Link prometheus to execution engine, and notifier to risk manager and execution engine
         self.execution_engine.prometheus = self.prometheus
+        self.execution_engine.notifier = self.notifier
         self.risk_manager.notifier = self.notifier
         
         # Initialize regime detector
