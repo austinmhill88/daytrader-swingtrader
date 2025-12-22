@@ -159,7 +159,9 @@ class RiskManager:
         if intent.side.value == "sell":
             # Check if this would create or increase a short position
             existing_pos = self.portfolio.get_position(intent.symbol)
-            is_short_trade = existing_pos is None or existing_pos.qty <= 0
+            # Selling creates/increases short if: no position OR position is long (closing) OR position is short (increasing)
+            # Only need to check shortability if creating new short or already short
+            is_short_trade = existing_pos is None or existing_pos.qty < 0
             
             if is_short_trade:
                 # Check if symbol is shortable

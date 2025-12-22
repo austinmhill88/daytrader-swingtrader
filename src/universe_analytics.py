@@ -290,7 +290,6 @@ class UniverseAnalytics:
             logger.warning("No Alpaca client provided for earnings blackout check")
             return symbols, []
         
-        from datetime import datetime, timedelta
         
         tradeable = []
         blackout = []

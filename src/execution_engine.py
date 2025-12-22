@@ -351,7 +351,14 @@ class ExecutionEngine:
         if not self.enable_time_slicing:
             return [intent]
         
-        order_value = intent.qty * (intent.limit_price or 0)
+        # Use limit price if available, otherwise cannot time-slice market orders
+        if intent.limit_price is None or intent.limit_price <= 0:
+            logger.warning(
+                f"Cannot time-slice order for {intent.symbol}: no limit price available"
+            )
+            return [intent]
+        
+        order_value = intent.qty * intent.limit_price
         
         # Check if order exceeds threshold
         if order_value < self.time_slice_size_threshold_usd:

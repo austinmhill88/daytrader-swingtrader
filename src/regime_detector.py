@@ -124,8 +124,10 @@ class RegimeDetector:
             
             for symbol, symbol_df in self.market_data.items():
                 if len(symbol_df) >= 20:
-                    symbol_df['returns'] = symbol_df['close'].pct_change()
-                    if symbol_df['returns'].iloc[-1] > 0:
+                    # Use a copy to avoid modifying cached data
+                    df_copy = symbol_df.copy()
+                    df_copy['returns'] = df_copy['close'].pct_change()
+                    if df_copy['returns'].iloc[-1] > 0:
                         positive_symbols += 1
                     total_symbols += 1
             
