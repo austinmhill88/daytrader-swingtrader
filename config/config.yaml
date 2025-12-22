@@ -142,6 +142,7 @@ execution:
   # Phase 3: Smart execution
   enable_time_slicing: false
   time_slice_size_threshold_usd: 10000
+  max_api_calls_per_minute: 200  # Rate limiting for Alpaca API
 
 # Phase 1: Backtesting configuration
 backtesting:

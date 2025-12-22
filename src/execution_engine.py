@@ -36,10 +36,21 @@ class ExecutionEngine:
         self.order_timeout_seconds = config.get('order_timeout_seconds', 60)
         self.max_slippage_bps = config.get('max_slippage_bps', 20)
         
+        # Time-slicing configuration
+        self.enable_time_slicing = config.get('enable_time_slicing', False)
+        self.time_slice_size_threshold_usd = config.get('time_slice_size_threshold_usd', 10000)
+        self.max_child_order_pct = config.get('max_child_order_pct', 20)
+        
+        # Rate limiting
+        self.api_call_count = 0
+        self.api_call_window_start = None
+        self.max_api_calls_per_minute = config.get('max_api_calls_per_minute', 200)
+        
         logger.info(
             f"ExecutionEngine initialized | "
             f"Order type: {self.default_order_type}, "
-            f"Bracket orders: {self.use_bracket_orders}"
+            f"Bracket orders: {self.use_bracket_orders}, "
+            f"Time slicing: {self.enable_time_slicing}"
         )
     
     def calculate_position_size(
@@ -219,9 +230,171 @@ class ExecutionEngine:
         
         return bracket
     
+    def _calculate_adaptive_limit_price(
+        self,
+        side: OrderSide,
+        current_price: float,
+        spread: Optional[float] = None,
+        volatility: Optional[float] = None
+    ) -> float:
+        """
+        Calculate adaptive limit price based on spread and volatility.
+        
+        Args:
+            side: Order side
+            current_price: Current market price
+            spread: Bid-ask spread (if available)
+            volatility: Recent volatility (if available)
+            
+        Returns:
+            Adaptive limit price
+        """
+        # Base offset
+        offset_bps = self.limit_offset_bps
+        
+        # Adjust offset based on spread (if provided)
+        if spread is not None and spread > 0:
+            # Wider spread requires more aggressive pricing
+            spread_bps = (spread / current_price) * 10000
+            offset_bps = max(offset_bps, spread_bps * 0.5)  # Use 50% of spread
+        
+        # Adjust offset based on volatility (if provided)
+        if volatility is not None and volatility > 0:
+            # Higher volatility requires more buffer
+            vol_adjustment = min(volatility * 100, 10)  # Cap at 10 bps adjustment
+            offset_bps += vol_adjustment
+        
+        # Cap maximum offset at reasonable level
+        offset_bps = min(offset_bps, 20)  # Max 20 bps offset
+        
+        offset_multiplier = 1 + (offset_bps / 10000)
+        
+        if side == OrderSide.BUY:
+            limit_price = current_price * offset_multiplier
+        else:
+            limit_price = current_price / offset_multiplier
+        
+        return round(limit_price, 2)
+    
+    def _check_rate_limit(self) -> bool:
+        """
+        Check if we're within rate limits for API calls.
+        Implements token bucket-style rate limiting.
+        
+        Returns:
+            True if we can make the call, False if rate limited
+        """
+        import time
+        from datetime import datetime, timedelta
+        
+        now = datetime.now()
+        
+        # Reset counter if new window
+        if self.api_call_window_start is None or \
+           (now - self.api_call_window_start).total_seconds() >= 60:
+            self.api_call_window_start = now
+            self.api_call_count = 0
+        
+        # Check if under limit
+        if self.api_call_count < self.max_api_calls_per_minute:
+            self.api_call_count += 1
+            return True
+        
+        # Rate limited
+        logger.warning(
+            f"Rate limit reached: {self.api_call_count} calls in last minute"
+        )
+        return False
+    
+    def _wait_for_rate_limit(self, max_wait_seconds: int = 30) -> bool:
+        """
+        Wait until rate limit resets.
+        
+        Args:
+            max_wait_seconds: Maximum time to wait
+            
+        Returns:
+            True if wait successful, False if timed out
+        """
+        import time
+        from datetime import datetime
+        
+        if self.api_call_window_start is None:
+            return True
+        
+        elapsed = (datetime.now() - self.api_call_window_start).total_seconds()
+        wait_time = max(0, 60 - elapsed)
+        
+        if wait_time > max_wait_seconds:
+            logger.warning(
+                f"Rate limit wait time ({wait_time:.1f}s) exceeds max ({max_wait_seconds}s)"
+            )
+            return False
+        
+        if wait_time > 0:
+            logger.info(f"Rate limit: waiting {wait_time:.1f}s")
+            time.sleep(wait_time)
+        
+        return True
+    
+    def _split_order_for_time_slicing(
+        self,
+        intent: OrderIntent
+    ) -> List[OrderIntent]:
+        """
+        Split a large order into smaller child orders for time-slicing.
+        
+        Args:
+            intent: Original order intent
+            
+        Returns:
+            List of child order intents
+        """
+        if not self.enable_time_slicing:
+            return [intent]
+        
+        order_value = intent.qty * (intent.limit_price or 0)
+        
+        # Check if order exceeds threshold
+        if order_value < self.time_slice_size_threshold_usd:
+            return [intent]
+        
+        # Calculate child order size (as % of parent)
+        child_pct = self.max_child_order_pct / 100.0
+        child_qty = max(1, int(intent.qty * child_pct))
+        
+        # Create child orders
+        child_orders = []
+        remaining_qty = intent.qty
+        
+        while remaining_qty > 0:
+            slice_qty = min(child_qty, remaining_qty)
+            
+            child_intent = OrderIntent(
+                symbol=intent.symbol,
+                side=intent.side,
+                qty=slice_qty,
+                order_type=intent.order_type,
+                limit_price=intent.limit_price,
+                time_in_force=intent.time_in_force,
+                bracket=None,  # Don't use brackets on child orders
+                strategy_name=intent.strategy_name,
+                reason=f"{intent.reason} (slice {len(child_orders)+1})"
+            )
+            
+            child_orders.append(child_intent)
+            remaining_qty -= slice_qty
+        
+        logger.info(
+            f"Order time-sliced | {intent.symbol} | "
+            f"{intent.qty} shares split into {len(child_orders)} orders"
+        )
+        
+        return child_orders
+    
     def execute_intents(self, intents: List[OrderIntent]) -> List[Optional[any]]:
         """
-        Execute a list of order intents.
+        Execute a list of order intents with time-slicing support.
         
         Args:
             intents: List of OrderIntent objects
@@ -233,8 +406,19 @@ class ExecutionEngine:
         
         for intent in intents:
             try:
-                result = self.execute_single_intent(intent)
-                results.append(result)
+                # Check if order should be time-sliced
+                child_orders = self._split_order_for_time_slicing(intent)
+                
+                # Execute each child order
+                for child_intent in child_orders:
+                    result = self.execute_single_intent(child_intent)
+                    results.append(result)
+                    
+                    # Small delay between child orders
+                    if len(child_orders) > 1:
+                        import time
+                        time.sleep(1)
+                        
             except Exception as e:
                 logger.error(f"Error executing intent for {intent.symbol}: {e}")
                 results.append(None)
@@ -243,7 +427,7 @@ class ExecutionEngine:
     
     def execute_single_intent(self, intent: OrderIntent) -> Optional[any]:
         """
-        Execute a single order intent.
+        Execute a single order intent with rate limiting and fill logging.
         
         Args:
             intent: OrderIntent to execute
@@ -252,6 +436,13 @@ class ExecutionEngine:
             Order object or None on failure
         """
         try:
+            # Check rate limit
+            if not self._check_rate_limit():
+                # Wait for rate limit to reset
+                if not self._wait_for_rate_limit(max_wait_seconds=10):
+                    logger.error(f"Rate limit exceeded, cannot place order for {intent.symbol}")
+                    return None
+            
             # Prepare bracket order parameters
             stop_loss = None
             take_profit = None
@@ -264,8 +455,8 @@ class ExecutionEngine:
                     'limit_price': intent.bracket.get('take_profit')
                 }
             
-            # Place order
-            order = self.client.place_order(
+            # Place order with exponential backoff retry
+            order = self._place_order_with_retry(
                 symbol=intent.symbol,
                 qty=intent.qty,
                 side=intent.side.value,
@@ -277,7 +468,7 @@ class ExecutionEngine:
             )
             
             if order:
-                # Log trade
+                # Log trade placement
                 log_trade(
                     action="ORDER_PLACED",
                     symbol=intent.symbol,
@@ -289,6 +480,14 @@ class ExecutionEngine:
                     order_id=order.id
                 )
                 
+                # Log bracket order details if present
+                if intent.bracket:
+                    logger.info(
+                        f"Bracket order | {intent.symbol} | "
+                        f"Stop: ${intent.bracket.get('stop_loss'):.2f}, "
+                        f"TP: ${intent.bracket.get('take_profit'):.2f}"
+                    )
+                
                 return order
             else:
                 logger.error(f"Order placement failed for {intent.symbol}")
@@ -297,6 +496,66 @@ class ExecutionEngine:
         except Exception as e:
             logger.error(f"Error placing order for {intent.symbol}: {e}")
             return None
+    
+    def _place_order_with_retry(
+        self,
+        symbol: str,
+        qty: int,
+        side: str,
+        order_type: str,
+        time_in_force: str,
+        limit_price: Optional[float] = None,
+        stop_loss: Optional[Dict] = None,
+        take_profit: Optional[Dict] = None,
+        max_retries: int = 3
+    ) -> Optional[any]:
+        """
+        Place order with exponential backoff retry.
+        
+        Args:
+            symbol: Stock symbol
+            qty: Quantity
+            side: Order side
+            order_type: Order type
+            time_in_force: Time in force
+            limit_price: Limit price
+            stop_loss: Stop loss params
+            take_profit: Take profit params
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            Order object or None
+        """
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                order = self.client.place_order(
+                    symbol=symbol,
+                    qty=qty,
+                    side=side,
+                    order_type=order_type,
+                    time_in_force=time_in_force,
+                    limit_price=limit_price,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit
+                )
+                return order
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 1s, 2s, 4s
+                    wait_time = 2 ** attempt
+                    logger.warning(
+                        f"Order placement failed (attempt {attempt+1}/{max_retries}), "
+                        f"retrying in {wait_time}s: {e}"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Order placement failed after {max_retries} attempts: {e}")
+                    raise
+        
+        return None
     
     def close_position(
         self,
