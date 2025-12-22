@@ -1,7 +1,7 @@
 """
 Risk management with pre-trade checks and kill-switch functionality.
 """
-from typing import List, Dict, Optional
+from typing import List, Dict
 from loguru import logger
 from datetime import datetime
 
@@ -51,6 +51,9 @@ class RiskManager:
         self.trades_today = 0
         self.alerts: List[AlertMessage] = []
         self.shortability_cache: Dict[str, bool] = {}  # Cache shortability checks
+        
+        # Alert notifier reference (will be set externally)
+        self.notifier = None
         
         logger.info(
             f"RiskManager initialized | "
@@ -247,11 +250,31 @@ class RiskManager:
         
         logger.critical(f"🛑 KILL SWITCH TRIGGERED: {reason}")
         logger.critical("All trading is now HALTED - manual intervention required")
+        
+        # Send alert notification
+        if self.notifier:
+            # Get drawdown if available
+            drawdown_pct = None
+            try:
+                drawdown_pct = self.portfolio.daily_drawdown_pct
+            except (AttributeError, Exception):
+                pass  # Portfolio may not have drawdown calculated yet
+            
+            self.notifier.send_kill_switch_alert(reason, drawdown_pct)
     
     def reset_kill_switch(self) -> None:
         """Reset the kill switch (manual intervention required)."""
         self.kill_switch_triggered = False
         logger.warning("Kill switch manually reset")
+    
+    def is_kill_switch_active(self) -> bool:
+        """
+        Check if kill switch is currently active.
+        
+        Returns:
+            True if kill switch is active
+        """
+        return self.kill_switch_triggered
     
     def _is_shortable(self, symbol: str) -> bool:
         """

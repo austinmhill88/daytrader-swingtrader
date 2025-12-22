@@ -6,8 +6,8 @@ import signal
 import sys
 import time
 import pandas as pd
-from datetime import datetime, time as dtime
-from typing import List, Dict, Optional
+from datetime import datetime
+from typing import List
 from loguru import logger
 
 from src.config import load_config, validate_config
@@ -21,6 +21,8 @@ from src.strategies.intraday_mean_reversion import IntradayMeanReversion
 from src.strategies.swing_trend_following import SwingTrendFollowing
 from src.models import Signal
 from src.regime_detector import RegimeDetector
+from src.notifier import AlertNotifier
+from src.prometheus_exporter import PrometheusExporter
 
 
 class TradingBot:
@@ -65,8 +67,23 @@ class TradingBot:
         self.execution_engine = ExecutionEngine(self.client, self.config['execution'])
         self.risk_manager = RiskManager(self.config['risk'], self.portfolio, self.client)
         
+        # Initialize alert notifier
+        self.notifier = AlertNotifier('config/alerts.yaml')
+        
+        # Initialize Prometheus exporter
+        self.prometheus = PrometheusExporter(self.config)
+        if self.prometheus.enabled:
+            self.prometheus.start()
+        
+        # Link prometheus to execution engine and notifier to risk manager
+        self.execution_engine.prometheus = self.prometheus
+        self.risk_manager.notifier = self.notifier
+        
         # Initialize regime detector
         self.regime_detector = RegimeDetector(self.config)
+        
+        # Cache alert threshold
+        self.alert_on_daily_pnl_threshold = self.config.get('alerts', {}).get('alert_on_daily_pnl_threshold', 5.0)
         
         # Initialize strategies
         self.strategies = []
@@ -97,16 +114,59 @@ class TradingBot:
     
     def _build_universe(self) -> List[str]:
         """
-        Build trading universe.
+        Build trading universe using UniverseAnalytics.
         
         Returns:
             List of stock symbols
         """
-        # For now, use default symbols from config
-        # In production, this would scan for liquid stocks meeting criteria
-        symbols = self.config['universe'].get('default_symbols', [])
-        logger.info(f"Universe: {len(symbols)} symbols - {', '.join(symbols[:5])}...")
-        return symbols
+        try:
+            from src.universe_analytics import UniverseAnalytics
+            
+            # Initialize UniverseAnalytics
+            universe_analytics = UniverseAnalytics(self.config)
+            
+            # Get symbols from config as base candidates
+            default_symbols = self.config['universe'].get('default_symbols', [])
+            
+            # For production, we would fetch data for many symbols
+            # For now, start with default symbols and fetch their data
+            hist_feed = HistoricalDataFeed(self.client)
+            
+            # Fetch recent data for universe analysis
+            symbol_data = hist_feed.get_multi_symbol_bars(
+                symbols=default_symbols,
+                timeframe="1Day",
+                limit=60  # 60 days for ADV calculation
+            )
+            
+            # Build universe with filters
+            universe_result = universe_analytics.build_universe_with_filters(
+                symbol_data=symbol_data,
+                tier='core',
+                alpaca_client=self.client,
+                apply_earnings_filter=True,
+                apply_shortability_filter=False
+            )
+            
+            symbols = universe_result.get('universe', [])
+            
+            # Fallback to default symbols if universe building fails
+            if not symbols:
+                logger.warning("Universe building returned empty, using default symbols")
+                symbols = default_symbols
+            
+            logger.info(
+                f"Universe: {len(symbols)} symbols - {', '.join(symbols[:5])}... | "
+                f"Filtered: {universe_result.get('earnings_blackout_count', 0)} in earnings blackout"
+            )
+            
+            return symbols
+            
+        except Exception as e:
+            logger.error(f"Error building universe: {e}, falling back to default symbols")
+            symbols = self.config['universe'].get('default_symbols', [])
+            logger.info(f"Universe (fallback): {len(symbols)} symbols - {', '.join(symbols[:5])}...")
+            return symbols
     
     def _warmup_strategies(self) -> None:
         """Warm up strategies with historical data."""
@@ -338,6 +398,50 @@ class TradingBot:
                 if current_time.minute % 15 == 0:
                     self.portfolio.log_summary()
                     self.risk_manager.log_risk_summary()
+                    
+                    # Update Prometheus metrics
+                    self.prometheus.update_portfolio_metrics(
+                        equity=self.portfolio.equity(),
+                        cash=self.portfolio.cash,
+                        positions_value=self.portfolio.positions_value(),
+                        daily_pnl=self.portfolio.daily_pnl,
+                        daily_pnl_pct=self.portfolio.daily_pnl_pct
+                    )
+                    
+                    exposure = self.portfolio.calculate_exposure()
+                    self.prometheus.update_exposure_metrics(
+                        gross_exposure_pct=exposure['gross_pct'],
+                        net_exposure_pct=exposure['net_pct'],
+                        long_exposure=exposure['long'],
+                        short_exposure=exposure['short']
+                    )
+                    
+                    num_positions = len(self.portfolio.positions)
+                    num_long = sum(1 for p in self.portfolio.positions.values() if p.side == 'long')
+                    num_short = num_positions - num_long
+                    self.prometheus.update_position_metrics(num_positions, num_long, num_short)
+                    
+                    # Check for alert conditions
+                    # Daily P&L threshold alert
+                    if abs(self.portfolio.daily_pnl_pct) >= self.alert_on_daily_pnl_threshold:
+                        self.notifier.send_daily_pnl_alert(
+                            self.portfolio.daily_pnl_pct,
+                            self.portfolio.daily_pnl
+                        )
+                    
+                    # Kill-switch status
+                    kill_switch_active = self.risk_manager.is_kill_switch_active()
+                    self.prometheus.update_risk_metrics(
+                        kill_switch_active=kill_switch_active,
+                        daily_drawdown_pct=self.portfolio.daily_drawdown_pct,
+                        max_drawdown_pct=0.0  # Would need to track this
+                    )
+                    
+                    if kill_switch_active:
+                        self.notifier.send_kill_switch_alert(
+                            reason=f"Daily drawdown: {self.portfolio.daily_drawdown_pct:.2f}%",
+                            drawdown_pct=self.portfolio.daily_drawdown_pct
+                        )
                     
                     # Log regime status
                     regime_summary = self.regime_detector.get_regime_summary()

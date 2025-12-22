@@ -5,9 +5,9 @@ import alpaca_trade_api as tradeapi
 from alpaca_trade_api.rest import APIError, TimeFrame
 from loguru import logger
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
-from src.models import Position
+from src.models import Position, Bar
 
 
 class AlpacaClient:
@@ -291,9 +291,9 @@ class AlpacaClient:
         start: Optional[str] = None,
         end: Optional[str] = None,
         limit: int = 1000
-    ) -> Optional[Any]:
+    ) -> Optional[List[Bar]]:
         """
-        Get historical bars.
+        Get historical bars as standardized Bar objects.
         
         Args:
             symbol: Stock symbol
@@ -303,7 +303,7 @@ class AlpacaClient:
             limit: Maximum number of bars
             
         Returns:
-            Bars data or None on failure
+            List of Bar objects or None on failure
         """
         try:
             # Map timeframe string to TimeFrame enum
@@ -317,7 +317,7 @@ class AlpacaClient:
             
             tf = timeframe_map.get(timeframe, TimeFrame.Minute)
             
-            bars = self._retry_on_failure(
+            raw_bars = self._retry_on_failure(
                 self.api.get_bars,
                 symbol,
                 tf,
@@ -325,20 +325,45 @@ class AlpacaClient:
                 end=end,
                 limit=limit
             )
-            return bars
+            
+            if not raw_bars:
+                return None
+            
+            # Convert to standardized Bar objects
+            bars = []
+            for b in raw_bars:
+                try:
+                    bar = Bar(
+                        symbol=getattr(b, 'S', symbol),
+                        ts=getattr(b, 't', datetime.now()),
+                        open=float(b.o),
+                        high=float(b.h),
+                        low=float(b.l),
+                        close=float(b.c),
+                        volume=int(b.v),
+                        vwap=float(b.vw) if hasattr(b, 'vw') and b.vw is not None else None,
+                        trade_count=int(b.n) if hasattr(b, 'n') and b.n is not None else None
+                    )
+                    bars.append(bar)
+                except (ValueError, TypeError, AttributeError) as e:
+                    logger.warning(f"Error converting bar for {symbol}: {e}")
+                    continue
+            
+            return bars if bars else None
+            
         except Exception as e:
             logger.error(f"Error getting bars for {symbol}: {e}")
             return None
     
-    def get_latest_bar(self, symbol: str) -> Optional[Any]:
+    def get_latest_bar(self, symbol: str) -> Optional[Bar]:
         """
-        Get the latest bar for a symbol.
+        Get the latest bar for a symbol as a standardized Bar object.
         
         Args:
             symbol: Stock symbol
             
         Returns:
-            Latest bar or None
+            Bar object or None
         """
         try:
             bars = self.get_bars(symbol, "1Min", limit=1)

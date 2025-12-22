@@ -1,7 +1,6 @@
 """
 Data feed classes for live streaming and historical data.
 """
-import alpaca_trade_api as tradeapi
 from alpaca_trade_api.stream import Stream
 from loguru import logger
 from typing import Callable, List, Dict, Optional
@@ -186,7 +185,7 @@ class HistoricalDataFeed:
         limit: int = 1000
     ) -> Optional[pd.DataFrame]:
         """
-        Get historical bars as DataFrame.
+        Get historical bars as DataFrame with standardized schema.
         
         Args:
             symbol: Stock symbol
@@ -203,6 +202,7 @@ class HistoricalDataFeed:
             start_str = start.isoformat() if start else None
             end_str = end.isoformat() if end else None
             
+            # Get bars as standardized Bar objects
             bars = self.client.get_bars(
                 symbol=symbol,
                 timeframe=timeframe,
@@ -215,19 +215,19 @@ class HistoricalDataFeed:
                 logger.warning(f"No bars returned for {symbol}")
                 return None
             
-            # Convert to DataFrame
+            # Convert Bar objects to DataFrame
             data = []
             for bar in bars:
                 data.append({
-                    'symbol': bar.S,
-                    'ts': bar.t,
-                    'open': float(bar.o),
-                    'high': float(bar.h),
-                    'low': float(bar.l),
-                    'close': float(bar.c),
-                    'volume': int(bar.v),
-                    'vwap': float(bar.vw) if hasattr(bar, 'vw') else None,
-                    'trade_count': int(bar.n) if hasattr(bar, 'n') else None
+                    'symbol': bar.symbol,
+                    'ts': bar.ts,
+                    'open': bar.open,
+                    'high': bar.high,
+                    'low': bar.low,
+                    'close': bar.close,
+                    'volume': bar.volume,
+                    'vwap': bar.vwap,
+                    'trade_count': bar.trade_count
                 })
             
             df = pd.DataFrame(data)

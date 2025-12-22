@@ -3,7 +3,7 @@ Order execution engine with position sizing and bracket order support.
 """
 import math
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional, Dict
 from loguru import logger
 
@@ -48,11 +48,15 @@ class ExecutionEngine:
         self.api_call_window_start = None
         self.max_api_calls_per_minute = config.get('max_api_calls_per_minute', 200)
         
+        # Prometheus exporter reference (will be set externally)
+        self.prometheus = None
+        
         logger.info(
             f"ExecutionEngine initialized | "
             f"Order type: {self.default_order_type}, "
             f"Bracket orders: {self.use_bracket_orders}, "
-            f"Time slicing: {self.enable_time_slicing}"
+            f"Time slicing: {self.enable_time_slicing}, "
+            f"Rate limit: {self.max_api_calls_per_minute} calls/min"
         )
     
     def calculate_position_size(
@@ -439,12 +443,16 @@ class ExecutionEngine:
         Returns:
             Order object or None on failure
         """
+        start_time = time.time()
+        
         try:
             # Check rate limit
             if not self._check_rate_limit():
                 # Wait for rate limit to reset
                 if not self._wait_for_rate_limit(max_wait_seconds=10):
                     logger.error(f"Rate limit exceeded, cannot place order for {intent.symbol}")
+                    if self.prometheus:
+                        self.prometheus.record_order_rejected("rate_limit")
                     return None
             
             # Prepare bracket order parameters
@@ -471,6 +479,11 @@ class ExecutionEngine:
                 take_profit=take_profit
             )
             
+            # Record latency
+            latency_ms = (time.time() - start_time) * 1000
+            if self.prometheus:
+                self.prometheus.record_order_latency(latency_ms)
+            
             if order:
                 # Log trade placement
                 log_trade(
@@ -484,6 +497,13 @@ class ExecutionEngine:
                     order_id=order.id
                 )
                 
+                # Record metrics
+                if self.prometheus:
+                    self.prometheus.record_order_placed(
+                        strategy=intent.strategy_name or "unknown",
+                        side=intent.side.value
+                    )
+                
                 # Log bracket order details if present
                 if intent.bracket:
                     logger.info(
@@ -495,10 +515,14 @@ class ExecutionEngine:
                 return order
             else:
                 logger.error(f"Order placement failed for {intent.symbol}")
+                if self.prometheus:
+                    self.prometheus.record_order_rejected("placement_failed")
                 return None
                 
         except Exception as e:
             logger.error(f"Error placing order for {intent.symbol}: {e}")
+            if self.prometheus:
+                self.prometheus.record_order_rejected("exception")
             return None
     
     def _place_order_with_retry(
