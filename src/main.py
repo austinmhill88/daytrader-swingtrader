@@ -61,7 +61,7 @@ class TradingBot:
         
         self.portfolio = PortfolioState(self.client)
         self.execution_engine = ExecutionEngine(self.client, self.config['execution'])
-        self.risk_manager = RiskManager(self.config['risk'], self.portfolio)
+        self.risk_manager = RiskManager(self.config['risk'], self.portfolio, self.client)
         
         # Initialize strategies
         self.strategies = []

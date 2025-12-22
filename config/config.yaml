@@ -114,6 +114,8 @@ risk:
   daily_max_drawdown_pct: 2.0
   per_trade_risk_pct: 0.4
   max_position_size_pct: 5.0  # max % of equity per position
+  max_position_per_symbol_pct: 10.0  # max % of equity per symbol (allows adding to position)
+  max_qty_per_symbol: null  # optional absolute quantity limit per symbol
   max_gross_exposure_pct_intraday: 50
   max_gross_exposure_pct_swing: 100
   short_exposure_cap_pct: 50
