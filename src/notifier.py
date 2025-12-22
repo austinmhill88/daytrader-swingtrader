@@ -6,7 +6,6 @@ import yaml
 from typing import Dict, Optional, List
 from datetime import datetime, timedelta
 from loguru import logger
-from collections import defaultdict
 import os
 
 

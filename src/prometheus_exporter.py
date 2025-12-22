@@ -3,7 +3,7 @@ Prometheus metrics exporter for trading system monitoring.
 """
 from prometheus_client import Gauge, Counter, Histogram, start_http_server
 from loguru import logger
-from typing import Dict, Optional
+from typing import Dict
 
 
 class PrometheusExporter:

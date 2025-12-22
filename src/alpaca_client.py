@@ -5,7 +5,7 @@ import alpaca_trade_api as tradeapi
 from alpaca_trade_api.rest import APIError, TimeFrame
 from loguru import logger
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 from src.models import Position, Bar
 

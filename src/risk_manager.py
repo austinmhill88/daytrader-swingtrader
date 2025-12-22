@@ -1,7 +1,7 @@
 """
 Risk management with pre-trade checks and kill-switch functionality.
 """
-from typing import List, Dict, Optional
+from typing import List, Dict
 from loguru import logger
 from datetime import datetime
 

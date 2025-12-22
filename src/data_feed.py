@@ -1,7 +1,6 @@
 """
 Data feed classes for live streaming and historical data.
 """
-import alpaca_trade_api as tradeapi
 from alpaca_trade_api.stream import Stream
 from loguru import logger
 from typing import Callable, List, Dict, Optional

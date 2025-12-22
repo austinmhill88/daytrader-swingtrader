@@ -6,8 +6,8 @@ import signal
 import sys
 import time
 import pandas as pd
-from datetime import datetime, time as dtime
-from typing import List, Dict, Optional
+from datetime import datetime
+from typing import List
 from loguru import logger
 
 from src.config import load_config, validate_config
