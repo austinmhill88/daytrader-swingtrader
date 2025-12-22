@@ -153,7 +153,16 @@ def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
         
     Returns:
         ADX series
+        
+    Raises:
+        ValueError: If series lengths don't match or contain invalid values
     """
+    # Validate inputs
+    if len(high) != len(low) or len(high) != len(close):
+        raise ValueError("High, low, and close series must have the same length")
+    
+    if high.isna().any() or low.isna().any() or close.isna().any():
+        raise ValueError("Input series contain NaN values")
     # Calculate +DM and -DM
     high_diff = high.diff()
     low_diff = -low.diff()

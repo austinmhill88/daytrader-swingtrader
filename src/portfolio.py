@@ -279,18 +279,25 @@ class PortfolioState:
         current_exposure = sum(abs(pos.market_value) for pos in self._positions_cache.values())
         
         # Calculate intent value
-        intent_value = intent.qty * (intent.limit_price or 0)
-        if intent.side.value == "sell":
-            # Check if we have a position
-            pos = self.get_position(intent.symbol)
-            if pos and pos.qty > 0:
-                # Reducing position
-                intent_value = -min(intent_value, abs(pos.market_value))
-            else:
-                # Opening short
-                intent_value = intent_value
+        intent_value = abs(intent.qty * (intent.limit_price or 0))
         
-        projected_exposure = current_exposure + abs(intent_value)
+        # Check if we're reducing an existing position
+        pos = self.get_position(intent.symbol)
+        if pos:
+            if intent.side.value == "sell" and pos.qty > 0:
+                # Closing/reducing long position
+                reduction = min(intent_value, abs(pos.market_value))
+                projected_exposure = current_exposure - reduction + max(0, intent_value - reduction)
+            elif intent.side.value == "buy" and pos.qty < 0:
+                # Closing/reducing short position
+                reduction = min(intent_value, abs(pos.market_value))
+                projected_exposure = current_exposure - reduction + max(0, intent_value - reduction)
+            else:
+                # Adding to existing position
+                projected_exposure = current_exposure + intent_value
+        else:
+            # New position
+            projected_exposure = current_exposure + intent_value
         equity = self.equity()
         
         if equity == 0:

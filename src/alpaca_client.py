@@ -309,8 +309,8 @@ class AlpacaClient:
             # Map timeframe string to TimeFrame enum
             timeframe_map = {
                 '1Min': TimeFrame.Minute,
-                '5Min': TimeFrame(5, 'Min'),
-                '15Min': TimeFrame(15, 'Min'),
+                '5Min': TimeFrame.Minute * 5,
+                '15Min': TimeFrame.Minute * 15,
                 '1Hour': TimeFrame.Hour,
                 '1Day': TimeFrame.Day
             }

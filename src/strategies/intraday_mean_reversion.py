@@ -131,23 +131,25 @@ class IntradayMeanReversion(Strategy):
         Returns:
             True if allowed to trade
         """
-        now = datetime.now().time()
+        from datetime import timedelta
+        
+        now = datetime.now()
+        current_time = now.time()
         
         # Market open is 9:30 AM
-        market_open = time(9, 30)
-        skip_until = time(9, 30 + self.skip_first_minutes)
+        market_open = datetime.combine(now.date(), time(9, 30))
+        skip_until = (market_open + timedelta(minutes=self.skip_first_minutes)).time()
         
         # Market close is 4:00 PM
-        market_close = time(16, 0)
-        reduce_after = time(16 - self.reduce_last_minutes // 60,
-                           (16 * 60 - self.reduce_last_minutes) % 60)
+        market_close = datetime.combine(now.date(), time(16, 0))
+        reduce_after = (market_close - timedelta(minutes=self.reduce_last_minutes)).time()
         
         # Check if we're in the skip period
-        if market_open <= now < skip_until:
+        if time(9, 30) <= current_time < skip_until:
             return False
         
         # Check if we're near close
-        if now >= reduce_after:
+        if current_time >= reduce_after:
             return False
         
         return True

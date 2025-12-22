@@ -87,8 +87,9 @@ class ExecutionEngine:
         # Ensure at least 1 share if we got this far
         qty = max(qty, 1)
         
-        # Check if we can afford it
-        max_affordable = math.floor((equity * 0.95) / price)  # Use 95% to leave buffer
+        # Check if we can afford it (leave buffer for safety)
+        cash_buffer_pct = self.config.get('cash_buffer_pct', 0.95)  # Default 5% buffer
+        max_affordable = math.floor((equity * cash_buffer_pct) / price)
         qty = min(qty, max_affordable)
         
         logger.debug(
