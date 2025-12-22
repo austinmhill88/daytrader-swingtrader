@@ -253,9 +253,14 @@ class AlertNotifier:
             message: Alert message
             severity: Alert severity
             metadata: Additional metadata
+            
+        Note:
+            Email implementation is not yet complete. This is a placeholder
+            for future SMTP integration. Enable email alerts only when
+            implementation is complete.
         """
-        # Email implementation would go here
-        # For now, just log
+        # TODO: Implement SMTP email sending
+        # Consider using smtplib or sendgrid/mailgun for production
         logger.info(f"Email alert (not implemented): {title} - {message}")
     
     def send_kill_switch_alert(self, reason: str, drawdown_pct: Optional[float] = None) -> None:

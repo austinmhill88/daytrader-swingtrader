@@ -82,6 +82,9 @@ class TradingBot:
         # Initialize regime detector
         self.regime_detector = RegimeDetector(self.config)
         
+        # Cache alert threshold
+        self.alert_on_daily_pnl_threshold = self.config.get('alerts', {}).get('alert_on_daily_pnl_threshold', 5.0)
+        
         # Initialize strategies
         self.strategies = []
         if self.config['strategies']['intraday_mean_reversion']['enabled']:
@@ -420,8 +423,7 @@ class TradingBot:
                     
                     # Check for alert conditions
                     # Daily P&L threshold alert
-                    pnl_threshold = self.config['alerts'].get('alert_on_daily_pnl_threshold', 5.0)
-                    if abs(self.portfolio.daily_pnl_pct) >= pnl_threshold:
+                    if abs(self.portfolio.daily_pnl_pct) >= self.alert_on_daily_pnl_threshold:
                         self.notifier.send_daily_pnl_alert(
                             self.portfolio.daily_pnl_pct,
                             self.portfolio.daily_pnl

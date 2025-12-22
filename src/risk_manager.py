@@ -253,7 +253,13 @@ class RiskManager:
         
         # Send alert notification
         if self.notifier:
-            drawdown_pct = self.portfolio.daily_drawdown_pct if hasattr(self.portfolio, 'daily_drawdown_pct') else None
+            # Get drawdown if available
+            drawdown_pct = None
+            try:
+                drawdown_pct = self.portfolio.daily_drawdown_pct
+            except (AttributeError, Exception):
+                pass  # Portfolio may not have drawdown calculated yet
+            
             self.notifier.send_kill_switch_alert(reason, drawdown_pct)
     
     def reset_kill_switch(self) -> None:

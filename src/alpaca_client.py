@@ -332,20 +332,24 @@ class AlpacaClient:
             # Convert to standardized Bar objects
             bars = []
             for b in raw_bars:
-                bar = Bar(
-                    symbol=b.S if hasattr(b, 'S') else symbol,
-                    ts=b.t if hasattr(b, 't') else datetime.now(),
-                    open=float(b.o),
-                    high=float(b.h),
-                    low=float(b.l),
-                    close=float(b.c),
-                    volume=int(b.v),
-                    vwap=float(b.vw) if hasattr(b, 'vw') else None,
-                    trade_count=int(b.n) if hasattr(b, 'n') else None
-                )
-                bars.append(bar)
+                try:
+                    bar = Bar(
+                        symbol=getattr(b, 'S', symbol),
+                        ts=getattr(b, 't', datetime.now()),
+                        open=float(b.o),
+                        high=float(b.h),
+                        low=float(b.l),
+                        close=float(b.c),
+                        volume=int(b.v),
+                        vwap=float(b.vw) if hasattr(b, 'vw') and b.vw is not None else None,
+                        trade_count=int(b.n) if hasattr(b, 'n') and b.n is not None else None
+                    )
+                    bars.append(bar)
+                except (ValueError, TypeError, AttributeError) as e:
+                    logger.warning(f"Error converting bar for {symbol}: {e}")
+                    continue
             
-            return bars
+            return bars if bars else None
             
         except Exception as e:
             logger.error(f"Error getting bars for {symbol}: {e}")
