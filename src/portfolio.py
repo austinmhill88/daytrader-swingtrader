@@ -265,6 +265,25 @@ class PortfolioState:
         
         return (net_exposure / equity) * 100.0
     
+    def calculate_exposure(self) -> Dict[str, float]:
+        """
+        Calculate detailed exposure metrics.
+        
+        Returns:
+            Dictionary with exposure metrics
+        """
+        long_exposure = sum(pos.market_value for pos in self._positions_cache.values() if pos.side == 'long')
+        short_exposure = sum(abs(pos.market_value) for pos in self._positions_cache.values() if pos.side == 'short')
+        
+        return {
+            'long': long_exposure,
+            'short': short_exposure,
+            'gross': long_exposure + short_exposure,
+            'net': long_exposure - short_exposure,
+            'gross_pct': self.gross_exposure_pct(),
+            'net_pct': self.net_exposure_pct()
+        }
+    
     def projected_gross_exposure_pct(self, intent: OrderIntent) -> float:
         """
         Calculate projected gross exposure if order is executed.
