@@ -765,11 +765,188 @@ system.ml_trainer.demote_model(model_id='xyz123', reason="Poor live performance"
 
 ---
 
+## Data Snapshots and Retention Policy
+
+### Overview
+Regular snapshots ensure reproducibility of backtests and provide disaster recovery capability. This section documents snapshot procedures and retention policies.
+
+### Monthly Snapshot Procedures
+
+**Schedule**: First Sunday of each month at 02:00 ET
+
+**Tasks**:
+1. **Create compressed snapshot**
+   ```bash
+   #!/bin/bash
+   # Monthly snapshot script
+   SNAPSHOT_DATE=$(date +%Y%m)
+   SNAPSHOT_NAME="trading-snapshot-${SNAPSHOT_DATE}"
+   
+   # Create snapshot directory
+   mkdir -p /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}
+   
+   # Copy raw data (parquet files)
+   tar -I 'zstd -T0' -cf /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/raw-data.tar.zst \
+     -C ${DATA_DIR:-./data} parquet/
+   
+   # Copy feature store
+   tar -I 'zstd -T0' -cf /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/features.tar.zst \
+     -C ${FEATURE_DIR:-./data/features} .
+   
+   # Copy models
+   tar -I 'zstd -T0' -cf /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/models.tar.zst \
+     -C ${MODEL_DIR:-./data/models} .
+   
+   # Copy reports
+   tar -I 'zstd -T0' -cf /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/reports.tar.zst \
+     -C ${LOGS_DIR:-./logs} .
+   
+   # Create manifest
+   cat > /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/manifest.txt << EOF
+   Snapshot: ${SNAPSHOT_NAME}
+   Date: $(date -I)
+   Raw Data: $(du -sh /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/raw-data.tar.zst | cut -f1)
+   Features: $(du -sh /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/features.tar.zst | cut -f1)
+   Models: $(du -sh /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/models.tar.zst | cut -f1)
+   Reports: $(du -sh /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/reports.tar.zst | cut -f1)
+   EOF
+   
+   echo "Snapshot ${SNAPSHOT_NAME} created successfully"
+   ```
+
+2. **Rsync to archive location**
+   ```bash
+   # Sync to 1TB archive SSD (when available)
+   rsync -avz --progress \
+     /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/ \
+     /mnt/archive/trading-snapshots/${SNAPSHOT_NAME}/
+   
+   # Verify checksum
+   cd /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}
+   sha256sum *.tar.zst > checksums.sha256
+   rsync -avz checksums.sha256 /mnt/archive/trading-snapshots/${SNAPSHOT_NAME}/
+   ```
+
+3. **Verify snapshot integrity**
+   ```bash
+   # Test extracting a sample
+   tar -I zstd -tf /mnt/ssd2tb/snapshots/${SNAPSHOT_NAME}/raw-data.tar.zst | head -10
+   
+   # Verify checksums match
+   cd /mnt/archive/trading-snapshots/${SNAPSHOT_NAME}
+   sha256sum -c checksums.sha256
+   ```
+
+### Retention Policy
+
+**Hot Data** (on 2TB SSD):
+- Raw parquet data: Last 90 days
+- Features: Last 60 days
+- Models: Last 3 versions per strategy
+- Logs: Last 30 days
+
+**Cold Data** (on 1TB archive):
+- Monthly snapshots: Keep all (or last 24 months)
+- Compressed with zstd for space efficiency
+- Verify checksums quarterly
+
+**Cleanup Schedule**:
+```bash
+# Weekly cleanup (every Monday at 03:00 ET)
+# Remove old hot data beyond retention windows
+
+# Raw data > 90 days
+find ${DATA_DIR:-./data}/parquet -type f -mtime +90 -delete
+
+# Features > 60 days
+find ${FEATURE_DIR:-./data/features} -type f -mtime +60 -delete
+
+# Logs > 30 days (except error logs, keep 90 days)
+find ${LOGS_DIR:-./logs} -name "*.log" -not -name "errors.log" -mtime +30 -delete
+find ${LOGS_DIR:-./logs} -name "errors.log" -mtime +90 -delete
+
+# Old model versions (keep only last 3)
+python << 'PYTHON_CLEANUP'
+import os
+from pathlib import Path
+
+model_dir = Path(os.environ.get('MODEL_DIR', './data/models'))
+for strategy_dir in model_dir.iterdir():
+    if strategy_dir.is_dir():
+        models = sorted(strategy_dir.glob('*.pkl'), key=os.path.getmtime, reverse=True)
+        # Keep latest 3, delete rest
+        for old_model in models[3:]:
+            old_model.unlink()
+            print(f"Deleted old model: {old_model}")
+PYTHON_CLEANUP
+```
+
+### Storage Budget Management
+
+**Projected Usage** (for 200-symbol universe):
+- Raw data: ~50GB per 90 days
+- Features: ~20GB per 60 days
+- Models: ~500MB per strategy
+- Logs: ~5GB per 30 days
+- **Total hot data**: ~80-100GB
+
+**2TB SSD Allocation**:
+- Hot data: 100GB
+- Snapshots (3 months): 300GB
+- Buffer: 1600GB free for future growth
+
+**1TB Archive SSD** (future):
+- Monthly snapshots: ~100GB each
+- Can store ~24 months of history
+
+### Restore Procedure
+
+**To restore from snapshot**:
+```bash
+# Example: Restore data from December 2024 snapshot
+SNAPSHOT_NAME="trading-snapshot-202412"
+RESTORE_DATE=$(date +%Y%m%d_%H%M%S)
+
+# Create restore directory
+mkdir -p /tmp/restore_${RESTORE_DATE}
+
+# Extract data
+cd /mnt/archive/trading-snapshots/${SNAPSHOT_NAME}
+tar -I zstd -xf raw-data.tar.zst -C /tmp/restore_${RESTORE_DATE}/
+tar -I zstd -xf features.tar.zst -C /tmp/restore_${RESTORE_DATE}/
+tar -I zstd -xf models.tar.zst -C /tmp/restore_${RESTORE_DATE}/
+
+# Verify checksums
+sha256sum -c checksums.sha256
+
+# Copy to production locations
+rsync -avz /tmp/restore_${RESTORE_DATE}/ ${DATA_DIR:-./data}/
+
+echo "Restore from ${SNAPSHOT_NAME} complete"
+```
+
+### Automation with Cron
+
+Add to crontab:
+```bash
+# Monthly snapshot (1st Sunday at 02:00 ET)
+0 7 1-7 * 0 [ $(date +\%u) -eq 7 ] && /opt/trading/scripts/monthly_snapshot.sh >> /var/log/trading/snapshots.log 2>&1
+
+# Weekly cleanup (every Monday at 03:00 ET)
+0 8 * * 1 /opt/trading/scripts/weekly_cleanup.sh >> /var/log/trading/cleanup.log 2>&1
+
+# Daily disk space check (every day at 06:00 ET)
+0 11 * * * /opt/trading/scripts/check_disk_space.sh >> /var/log/trading/disk.log 2>&1
+```
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2024-01-15 | System | Initial version |
+| 1.1 | 2024-12-22 | System | Added snapshot and retention policy section |
 
 ---
 

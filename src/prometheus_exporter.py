@@ -185,6 +185,11 @@ class PrometheusExporter:
             ['component']
         )
         
+        self.stream_disconnects_counter = Counter(
+            'trading_stream_disconnects_total',
+            'Total data stream disconnections'
+        )
+        
         logger.info(f"Prometheus exporter initialized on port {self.port}")
     
     def start(self) -> None:
@@ -362,3 +367,9 @@ class PrometheusExporter:
         if not self.enabled:
             return
         self.reconnections_counter.labels(component=component).inc()
+    
+    def record_stream_disconnect(self) -> None:
+        """Record a stream disconnection."""
+        if not self.enabled:
+            return
+        self.stream_disconnects_counter.inc()

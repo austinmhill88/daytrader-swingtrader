@@ -209,13 +209,14 @@ metrics:
 
 storage:
   db_url: "sqlite:///./data/trading.db"
-  logs_dir: "./logs"
-  data_dir: "./data"
-  backup_dir: "./data/backups"
-  # Phase 1: Data lake paths
-  parquet_dir: "./data/parquet"
-  feature_store_dir: "./data/features"
-  model_dir: "./data/models"
+  # Environment variable support for SSD-aware storage paths
+  logs_dir: ${LOGS_DIR:./logs}
+  data_dir: ${DATA_DIR:./data}
+  backup_dir: ${BACKUP_DIR:./data/backups}
+  # Phase 1: Data lake paths with env var support
+  parquet_dir: ${DATA_DIR:./data}/parquet
+  feature_store_dir: ${FEATURE_DIR:./data/features}
+  model_dir: ${MODEL_DIR:./data/models}
   
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR

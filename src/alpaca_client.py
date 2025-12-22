@@ -487,3 +487,69 @@ class AlpacaClient:
         except Exception as e:
             logger.error(f"Error getting asset info for {symbol}: {e}")
             return None
+    
+    def get_corporate_actions(
+        self,
+        symbol: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Optional[List[Any]]:
+        """
+        Get corporate actions including earnings announcements for a symbol.
+        
+        Args:
+            symbol: Stock symbol
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            
+        Returns:
+            List of corporate action events or None on failure
+            
+        Note:
+            This is a placeholder for earnings calendar integration.
+            Alpaca's REST API v2 doesn't provide direct earnings calendar access.
+            Consider integrating with external services like:
+            - Alpha Vantage Earnings Calendar
+            - Financial Modeling Prep
+            - Earnings Whispers
+            - Bloomberg/Reuters data feeds
+        """
+        try:
+            # Placeholder implementation - returns empty list
+            # TODO: Integrate with external earnings calendar service
+            logger.debug(f"Corporate actions query for {symbol} (not implemented)")
+            return []
+        except Exception as e:
+            logger.error(f"Error getting corporate actions for {symbol}: {e}")
+            return None
+    
+    def has_upcoming_earnings(
+        self,
+        symbol: str,
+        days_ahead: int = 7
+    ) -> bool:
+        """
+        Check if symbol has earnings announcement within specified days.
+        
+        Args:
+            symbol: Stock symbol
+            days_ahead: Number of days to look ahead
+            
+        Returns:
+            True if earnings within timeframe, False otherwise
+            
+        Note:
+            This is a placeholder that returns False until integrated
+            with an actual earnings calendar service.
+        """
+        try:
+            # Placeholder - always returns False
+            # TODO: Implement with actual earnings calendar service
+            # Example integration points:
+            # - Alpha Vantage: /query?function=EARNINGS_CALENDAR
+            # - FMP: /v3/earnings_calendar/{symbol}
+            # - Custom scraper from investor relations pages
+            return False
+        except Exception as e:
+            logger.warning(f"Error checking earnings for {symbol}: {e}")
+            return False

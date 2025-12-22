@@ -140,13 +140,17 @@ class TradingBot:
                 limit=60  # 60 days for ADV calculation
             )
             
+            # Pass previous universe for change tracking
+            previous_universe = getattr(self, 'universe', None)
+            
             # Build universe with filters
             universe_result = universe_analytics.build_universe_with_filters(
                 symbol_data=symbol_data,
                 tier='core',
                 alpaca_client=self.client,
                 apply_earnings_filter=True,
-                apply_shortability_filter=False
+                apply_shortability_filter=False,
+                previous_universe=previous_universe
             )
             
             symbols = universe_result.get('universe', [])
@@ -156,10 +160,18 @@ class TradingBot:
                 logger.warning("Universe building returned empty, using default symbols")
                 symbols = default_symbols
             
+            # Enhanced logging with base_count, final_count, and filter details
             logger.info(
-                f"Universe: {len(symbols)} symbols - {', '.join(symbols[:5])}... | "
-                f"Filtered: {universe_result.get('earnings_blackout_count', 0)} in earnings blackout"
+                f"Universe Refresh | "
+                f"Base: {universe_result.get('base_count', len(symbols))} → "
+                f"Final: {universe_result.get('final_count', len(symbols))} | "
+                f"Earnings blackout: {universe_result.get('earnings_blackout_count', 0)}, "
+                f"Non-shortable: {universe_result.get('non_shortable_count', 0)}"
             )
+            
+            # Log top symbols
+            if symbols:
+                logger.info(f"Top symbols: {', '.join(symbols[:10])}" + ("..." if len(symbols) > 10 else ""))
             
             return symbols
             
