@@ -4,7 +4,7 @@ alpaca:
   key_id: ${APCA_API_KEY_ID}
   secret_key: ${APCA_API_SECRET_KEY}
   base_url: ${APCA_API_BASE_URL}
-  data_feed: "sip"  # "iex" or "sip" (requires subscription)
+  data_feed: "iex"  # "iex" or "sip" (requires subscription)
   reconnect_attempts: 5
   reconnect_delay: 10  # seconds
 

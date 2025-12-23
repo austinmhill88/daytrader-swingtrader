@@ -78,13 +78,12 @@ class UniverseAnalytics:
                 df['dollar_volume'] = df['close'] * df['volume']
                 adv = df['dollar_volume'].mean()
                 
-                # Calculate spread (if available)
-                if 'high' in df.columns and 'low' in df.columns:
+                # Calculate spread (if available) - skip if insufficient data
+                avg_spread_bps = None
+                if 'high' in df.columns and 'low' in df.columns and len(df) >= 10:
                     df['spread'] = (df['high'] - df['low']) / df['close']
                     avg_spread_pct = df['spread'].mean() * 100
                     avg_spread_bps = avg_spread_pct * 100
-                else:
-                    avg_spread_bps = None
                 
                 # Calculate price stability
                 price_std = df['close'].std()
@@ -96,8 +95,9 @@ class UniverseAnalytics:
                 volume_mean = df['volume'].mean()
                 volume_cv = volume_std / volume_mean if volume_mean > 0 else 0
                 
-                # Recent metrics
-                recent_df = df.tail(20)  # Last 20 bars
+                # Recent metrics (use min of 20 or available bars)
+                recent_n = min(20, len(df))
+                recent_df = df.tail(recent_n)
                 recent_adv = (recent_df['close'] * recent_df['volume']).mean()
                 recent_price = recent_df['close'].mean()
                 
@@ -110,7 +110,7 @@ class UniverseAnalytics:
                     adv_score = min(40, (adv / self.min_adv_usd) * 10)
                     score += adv_score
                 
-                # Spread component (30 points)
+                # Spread component (30 points) - only if we have enough data
                 if avg_spread_bps is not None:
                     if avg_spread_bps <= self.max_spread_bps:
                         spread_score = 30 * (1 - avg_spread_bps / self.max_spread_bps)
@@ -172,12 +172,19 @@ class UniverseAnalytics:
                 logger.warning("No symbols passed liquidity analysis")
                 return []
             
+            # Use effective ADV (recent ADV for small datasets)
+            liquidity_df['effective_adv'] = liquidity_df.apply(
+                lambda row: row['recent_adv_usd'] if row['num_bars'] < 10 else row['adv_usd'],
+                axis=1
+            )
+            
             # Filter by minimum criteria
             filtered = liquidity_df[
-                (liquidity_df['adv_usd'] >= self.min_adv_usd) &
+                (liquidity_df['effective_adv'] >= self.min_adv_usd) &
                 (liquidity_df['avg_price'] >= self.min_price)
             ]
             
+            # Only apply spread filter if we have data (skip for small datasets)
             if 'avg_spread_bps' in filtered.columns:
                 filtered = filtered[
                     (filtered['avg_spread_bps'].isna()) |
@@ -198,7 +205,7 @@ class UniverseAnalytics:
             if len(selected) > 0:
                 logger.info(
                     f"Universe stats | "
-                    f"Avg ADV: ${selected['adv_usd'].mean()/1e6:.1f}M, "
+                    f"Avg ADV: ${selected['effective_adv'].mean()/1e6:.1f}M, "
                     f"Avg Score: {selected['liquidity_score'].mean():.1f}"
                 )
             
@@ -295,6 +302,10 @@ class UniverseAnalytics:
         Returns:
             Tuple of (tradeable_symbols, blackout_symbols)
         """
+        # Handle empty input
+        if not symbols:
+            return [], []
+        
         if alpaca_client is None:
             # Can't check without client, return all as tradeable
             logger.warning("No Alpaca client provided for earnings blackout check")
@@ -352,6 +363,10 @@ class UniverseAnalytics:
         Returns:
             Tuple of (shortable_symbols, non_shortable_symbols)
         """
+        # Handle empty input
+        if not symbols:
+            return [], []
+        
         if alpaca_client is None:
             logger.warning("No Alpaca client provided for shortability check")
             return symbols, []
@@ -370,10 +385,13 @@ class UniverseAnalytics:
                 # Conservative: add to shortable if can't check
                 shortable.append(symbol)
         
+        # Calculate percentage safely
+        pct = (100 * len(shortable) / len(symbols)) if symbols else 0.0
+        
         logger.info(
             f"Shortability check | "
             f"{len(shortable)}/{len(symbols)} symbols are shortable "
-            f"({100*len(shortable)/len(symbols):.1f}%)"
+            f"({pct:.1f}%)"
         )
         
         if non_shortable:
