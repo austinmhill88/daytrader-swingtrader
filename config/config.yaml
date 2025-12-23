@@ -81,7 +81,7 @@ strategies:
       vwap_window: 20
     # Phase 2: ML model configuration
     ml_model:
-      enabled: false
+      enabled: true
       model_type: "lightgbm"  # lightgbm, xgboost, random_forest
       features: ["zscore", "rsi", "atr", "volume_zscore", "spread"]
       
@@ -99,7 +99,7 @@ strategies:
     pullback_threshold_pct: 2.0
     # Phase 2: ML model configuration
     ml_model:
-      enabled: false
+      enabled: true
       model_type: "lightgbm"
       features: ["ema_slope", "adx", "atr", "volume_zscore", "trend_strength"]
 
@@ -178,7 +178,7 @@ backtesting:
 
 # Phase 2: ML model training configuration
 ml_training:
-  enabled: false
+  enabled: true
   training_schedule: "daily"  # daily, weekly, manual
   validation_method: "walk_forward"  # walk_forward, purged_cv
   model_registry:
@@ -193,7 +193,7 @@ ml_training:
 
 # Phase 1: Scheduler configuration  
 scheduler:
-  enabled: false  # enable for automation
+  enabled: true  # enable for automation
   timezone: "America/New_York"
   tasks:
     pre_market:

@@ -30,14 +30,17 @@ class IntradayMeanReversion(Strategy):
     
     name = "intraday_mean_reversion"
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, full_config: Dict = None):
         """
         Initialize strategy.
         
         Args:
             config: Strategy configuration
+            full_config: Full application configuration (optional, for ML model access)
         """
         super().__init__(config)
+        
+        self.full_config = full_config or {}
         
         # Strategy parameters
         self.zscore_entry = config.get('zscore_entry', 2.0)
@@ -58,10 +61,17 @@ class IntradayMeanReversion(Strategy):
         self.atr_window = lookback.get('atr_window', 14)
         self.vwap_window = lookback.get('vwap_window', 20)
         
+        # ML model support
+        self.ml_enabled = config.get('ml_model', {}).get('enabled', False)
+        self.model = None
+        self.registry = None
+        self.fs = None
+        
         logger.info(
             f"{self.name} initialized | "
             f"zscore_entry={self.zscore_entry}, "
-            f"atr_stop_mult={self.atr_stop_multiplier}"
+            f"atr_stop_mult={self.atr_stop_multiplier}, "
+            f"ml_enabled={self.ml_enabled}"
         )
     
     def warmup(self, historical_data: Dict[str, pd.DataFrame]) -> None:
@@ -72,6 +82,38 @@ class IntradayMeanReversion(Strategy):
             historical_data: Dictionary mapping symbol to DataFrame
         """
         logger.info(f"{self.name}: Warming up with data for {len(historical_data)} symbols")
+        
+        # Load ML model if enabled
+        if self.ml_enabled and self.full_config:
+            try:
+                from pathlib import Path
+                import joblib
+                from src.model_registry import ModelRegistry
+                from src.feature_store import FeatureStore
+                
+                # Initialize registry and feature store
+                storage_cfg = self.full_config.get('storage', {})
+                model_dir = storage_cfg.get('model_dir', './data/models')
+                feature_dir = storage_cfg.get('feature_store_dir', './data/features')
+                
+                self.registry = ModelRegistry(model_dir)
+                self.fs = FeatureStore(base_dir=feature_dir)
+                
+                # Load latest model
+                artifact = self.registry.get_latest_model("intraday_mean_reversion")
+                if artifact and Path(artifact).exists():
+                    self.model = joblib.load(artifact)
+                    metrics = self.registry.get_metrics("intraday_mean_reversion")
+                    logger.info(
+                        f"{self.name}: Loaded ML model | "
+                        f"Sharpe: {metrics.get('sharpe_ratio', 0):.2f}, "
+                        f"Win rate: {metrics.get('win_rate', 0):.2%}"
+                    )
+                else:
+                    logger.info(f"{self.name}: No promoted ML model found, using rule-based only")
+            except Exception as e:
+                logger.warning(f"{self.name}: Error loading ML model: {e}")
+                self.ml_enabled = False
         
         for symbol, df in historical_data.items():
             if df is None or len(df) == 0:
