@@ -50,7 +50,9 @@ class RiskManager:
         self.consecutive_losses = 0
         self.trades_today = 0
         self.alerts: List[AlertMessage] = []
-        self.shortability_cache: Dict[str, bool] = {}  # Cache shortability checks
+        # Enhanced shortability cache with timestamps
+        self.shortability_cache: Dict[str, Dict] = {}  # symbol -> {is_shortable, timestamp}
+        self.shortability_cache_ttl = 3600  # Cache TTL in seconds (1 hour)
         
         # Alert notifier reference (will be set externally)
         self.notifier = None
@@ -279,7 +281,7 @@ class RiskManager:
     def _is_shortable(self, symbol: str) -> bool:
         """
         Check if a symbol is shortable.
-        Uses cache to avoid repeated API calls.
+        Uses cache with TTL to avoid repeated API calls.
         
         Args:
             symbol: Stock symbol
@@ -287,19 +289,36 @@ class RiskManager:
         Returns:
             True if shortable, False otherwise
         """
-        # Check cache first
+        now = datetime.now().timestamp()
+        
+        # Check cache first (with TTL)
         if symbol in self.shortability_cache:
-            return self.shortability_cache[symbol]
+            cache_entry = self.shortability_cache[symbol]
+            cache_time = cache_entry.get('timestamp', 0)
+            
+            # Check if cache is still valid
+            if now - cache_time < self.shortability_cache_ttl:
+                return cache_entry['is_shortable']
+            else:
+                logger.debug(f"Shortability cache expired for {symbol}")
         
         # Query API if we have a client
         if self.alpaca_client:
             is_shortable = self.alpaca_client.is_shortable(symbol)
-            self.shortability_cache[symbol] = is_shortable
+            self.shortability_cache[symbol] = {
+                'is_shortable': is_shortable,
+                'timestamp': now
+            }
             return is_shortable
         
         # Conservative: if no client available, assume not shortable
         logger.warning(f"Cannot check shortability for {symbol}: no Alpaca client")
         return False
+    
+    def clear_shortability_cache(self) -> None:
+        """Clear the shortability cache (useful for daily reset)."""
+        self.shortability_cache.clear()
+        logger.info("Shortability cache cleared")
     
     def record_trade_result(self, pnl: float) -> None:
         """

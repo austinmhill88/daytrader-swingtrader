@@ -5,7 +5,7 @@ import alpaca_trade_api as tradeapi
 from alpaca_trade_api.rest import APIError, TimeFrame
 from loguru import logger
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from src.models import Position, Bar
 
@@ -295,17 +295,19 @@ class AlpacaClient:
         timeframe: str,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        limit: int = 1000
+        limit: int = 1000,
+        paginate: bool = True
     ) -> Optional[List[Bar]]:
         """
-        Get historical bars as standardized Bar objects.
+        Get historical bars as standardized Bar objects with pagination support.
         
         Args:
             symbol: Stock symbol
             timeframe: Timeframe ("1Min", "5Min", "15Min", "1Hour", "1Day", etc.)
             start: Start date (ISO format)
             end: End date (ISO format)
-            limit: Maximum number of bars
+            limit: Maximum number of bars per request
+            paginate: Enable automatic pagination for large date ranges
             
         Returns:
             List of Bar objects or None on failure
@@ -322,39 +324,70 @@ class AlpacaClient:
             
             tf = timeframe_map.get(timeframe, TimeFrame.Minute)
             
-            raw_bars = self._retry_on_failure(
-                self.api.get_bars,
-                symbol,
-                tf,
-                start=start,
-                end=end,
-                limit=limit
-            )
+            all_bars = []
+            current_start = start
+            max_iterations = 100  # Safety limit for pagination
+            iteration = 0
             
-            if not raw_bars:
-                return None
-            
-            # Convert to standardized Bar objects
-            bars = []
-            for b in raw_bars:
+            while iteration < max_iterations:
                 try:
-                    bar = Bar(
-                        symbol=getattr(b, 'S', symbol),
-                        ts=getattr(b, 't', datetime.now()),
-                        open=float(b.o),
-                        high=float(b.h),
-                        low=float(b.l),
-                        close=float(b.c),
-                        volume=int(b.v),
-                        vwap=float(b.vw) if hasattr(b, 'vw') and b.vw is not None else None,
-                        trade_count=int(b.n) if hasattr(b, 'n') and b.n is not None else None
+                    raw_bars = self._retry_on_failure(
+                        self.api.get_bars,
+                        symbol,
+                        tf,
+                        start=current_start,
+                        end=end,
+                        limit=limit
                     )
-                    bars.append(bar)
-                except (ValueError, TypeError, AttributeError) as e:
-                    logger.warning(f"Error converting bar for {symbol}: {e}")
-                    continue
+                    
+                    if not raw_bars or len(raw_bars) == 0:
+                        break
+                    
+                    # Convert to standardized Bar objects
+                    batch_bars = []
+                    for b in raw_bars:
+                        try:
+                            bar = Bar(
+                                symbol=getattr(b, 'S', symbol),
+                                ts=getattr(b, 't', datetime.now()),
+                                open=float(b.o),
+                                high=float(b.h),
+                                low=float(b.l),
+                                close=float(b.c),
+                                volume=int(b.v),
+                                vwap=float(b.vw) if hasattr(b, 'vw') and b.vw is not None else None,
+                                trade_count=int(b.n) if hasattr(b, 'n') and b.n is not None else None
+                            )
+                            batch_bars.append(bar)
+                        except (ValueError, TypeError, AttributeError) as e:
+                            logger.warning(f"Error converting bar for {symbol}: {e}")
+                            continue
+                    
+                    all_bars.extend(batch_bars)
+                    
+                    # Check if we should continue pagination
+                    if not paginate or len(raw_bars) < limit:
+                        break
+                    
+                    # Update start time for next batch (use last bar timestamp)
+                    if batch_bars:
+                        last_ts = batch_bars[-1].ts
+                        # Add small increment to avoid duplicate
+                        current_start = (last_ts + timedelta(seconds=1)).isoformat()
+                        logger.debug(f"Paginating: fetched {len(batch_bars)} bars, next start: {current_start}")
+                    else:
+                        break
+                    
+                    iteration += 1
+                    
+                except Exception as batch_error:
+                    logger.warning(f"Error in batch {iteration}: {batch_error}, continuing with partial data")
+                    break
             
-            return bars if bars else None
+            if iteration >= max_iterations:
+                logger.warning(f"Reached max pagination iterations ({max_iterations}) for {symbol}")
+            
+            return all_bars if all_bars else None
             
         except Exception as e:
             logger.error(f"Error getting bars for {symbol}: {e}")
