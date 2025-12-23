@@ -22,10 +22,20 @@ class AlertNotifier:
         Args:
             alerts_config_path: Path to alerts configuration file
         """
-        # Load alerts configuration
+        # Load alerts configuration with robust encoding handling
         try:
-            with open(alerts_config_path, 'r') as f:
+            # Try UTF-8 first
+            with open(alerts_config_path, 'r', encoding='utf-8') as f:
                 self.alerts_config = yaml.safe_load(f)
+        except UnicodeDecodeError:
+            # Fallback to cp1252 (Windows encoding) on Unicode error
+            logger.warning(f"UTF-8 decode failed for {alerts_config_path}, trying cp1252")
+            try:
+                with open(alerts_config_path, 'r', encoding='cp1252') as f:
+                    self.alerts_config = yaml.safe_load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load alerts config from {alerts_config_path} with cp1252: {e}")
+                self.alerts_config = {}
         except Exception as e:
             logger.warning(f"Failed to load alerts config from {alerts_config_path}: {e}")
             self.alerts_config = {}

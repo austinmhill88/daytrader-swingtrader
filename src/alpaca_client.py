@@ -2,7 +2,7 @@
 Alpaca API client wrapper with error handling and reconnection logic.
 """
 import alpaca_trade_api as tradeapi
-from alpaca_trade_api.rest import APIError, TimeFrame
+from alpaca_trade_api.rest import APIError, TimeFrame, TimeFrameUnit
 from loguru import logger
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -289,6 +289,39 @@ class AlpacaClient:
             logger.error(f"Error getting orders: {e}")
             return []
     
+    def _normalize_timestamp(self, timestamp: Optional[str]) -> Optional[str]:
+        """
+        Normalize timestamp to RFC3339 format without microseconds.
+        
+        Args:
+            timestamp: ISO format timestamp string
+            
+        Returns:
+            Normalized timestamp string or None
+        """
+        if timestamp is None:
+            return None
+        
+        try:
+            # Parse the timestamp if it's a string
+            if isinstance(timestamp, str):
+                # Try to parse as datetime
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            elif isinstance(timestamp, datetime):
+                dt = timestamp
+            else:
+                return None
+            
+            # Strip microseconds and format as RFC3339
+            dt = dt.replace(microsecond=0)
+            
+            # Return in ISO format (RFC3339 compatible)
+            return dt.isoformat()
+            
+        except Exception as e:
+            logger.warning(f"Error normalizing timestamp '{timestamp}': {e}")
+            return timestamp  # Return original if parsing fails
+    
     def get_bars(
         self,
         symbol: str,
@@ -313,31 +346,37 @@ class AlpacaClient:
             List of Bar objects or None on failure
         """
         try:
-            # Map timeframe string to TimeFrame enum
+            # Map timeframe string to TimeFrame constructor (not multiplication!)
             timeframe_map = {
-                '1Min': TimeFrame.Minute,
-                '5Min': TimeFrame.Minute * 5,
-                '15Min': TimeFrame.Minute * 15,
-                '1Hour': TimeFrame.Hour,
-                '1Day': TimeFrame.Day
+                '1Min': TimeFrame(1, TimeFrameUnit.Minute),
+                '5Min': TimeFrame(5, TimeFrameUnit.Minute),
+                '15Min': TimeFrame(15, TimeFrameUnit.Minute),
+                '1Hour': TimeFrame(1, TimeFrameUnit.Hour),
+                '1Day': TimeFrame(1, TimeFrameUnit.Day)
             }
             
-            tf = timeframe_map.get(timeframe, TimeFrame.Minute)
+            tf = timeframe_map.get(timeframe, TimeFrame(1, TimeFrameUnit.Minute))
+            
+            # Normalize timestamps to RFC3339 without microseconds
+            normalized_start = self._normalize_timestamp(start)
+            normalized_end = self._normalize_timestamp(end)
             
             all_bars = []
-            current_start = start
+            current_start = normalized_start
             max_iterations = 100  # Safety limit for pagination
             iteration = 0
             
             while iteration < max_iterations:
                 try:
+                    # Always pass feed parameter to avoid SIP data permission errors
                     raw_bars = self._retry_on_failure(
                         self.api.get_bars,
                         symbol,
                         tf,
                         start=current_start,
-                        end=end,
-                        limit=limit
+                        end=normalized_end,
+                        limit=limit,
+                        feed=self.data_feed
                     )
                     
                     if not raw_bars or len(raw_bars) == 0:
