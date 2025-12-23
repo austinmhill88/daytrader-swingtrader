@@ -83,6 +83,28 @@ class TradingBot:
         self.execution_engine.notifier = self.notifier
         self.risk_manager.notifier = self.notifier
         
+        # Initialize scheduler and register handlers
+        from src.scheduler import TradingScheduler
+        from src.scheduler_handlers import make_handlers
+        
+        scheduler_cfg = self.config.get('scheduler', {})
+        self.scheduler = TradingScheduler(self.config)
+        handlers = make_handlers(self.config, self.client)
+        
+        # Register handlers
+        for action, fn in handlers.items():
+            self.scheduler.register_handler(action, fn)
+        
+        # Wire notifier to scheduler
+        self.scheduler.notifier = self.notifier
+        
+        # Start scheduler if enabled
+        if scheduler_cfg.get('enabled', False):
+            self.scheduler.start()
+            logger.info("Scheduler started for autonomous operation")
+        else:
+            logger.info("Scheduler disabled")
+        
         # Initialize regime detector
         self.regime_detector = RegimeDetector(self.config)
         
@@ -93,12 +115,18 @@ class TradingBot:
         self.strategies = []
         if self.config['strategies']['intraday_mean_reversion']['enabled']:
             self.strategies.append(
-                IntradayMeanReversion(self.config['strategies']['intraday_mean_reversion'])
+                IntradayMeanReversion(
+                    self.config['strategies']['intraday_mean_reversion'],
+                    full_config=self.config
+                )
             )
         
         if self.config['strategies']['swing_trend_following']['enabled']:
             self.strategies.append(
-                SwingTrendFollowing(self.config['strategies']['swing_trend_following'])
+                SwingTrendFollowing(
+                    self.config['strategies']['swing_trend_following'],
+                    full_config=self.config
+                )
             )
         
         logger.info(f"Initialized {len(self.strategies)} strategies")

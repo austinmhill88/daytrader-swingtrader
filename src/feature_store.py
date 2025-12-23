@@ -23,15 +23,23 @@ class FeatureStore:
     Phase 2 implementation for ML model training.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any] = None, base_dir: str = None):
         """
         Initialize feature store.
         
         Args:
-            config: Application configuration
+            config: Application configuration (optional if base_dir provided)
+            base_dir: Base directory for features (optional if config provided)
         """
-        self.config = config
-        self.feature_dir = Path(config.get('storage', {}).get('feature_store_dir', './data/features'))
+        if config:
+            self.config = config
+            self.feature_dir = Path(config.get('storage', {}).get('feature_store_dir', './data/features'))
+        elif base_dir:
+            self.config = {}
+            self.feature_dir = Path(base_dir)
+        else:
+            raise ValueError("Either config or base_dir must be provided")
+        
         self.feature_dir.mkdir(parents=True, exist_ok=True)
         
         # Feature definitions (extensible)
@@ -260,3 +268,120 @@ class FeatureStore:
         for features in self.feature_definitions.values():
             all_features.extend(features)
         return all_features
+    
+    # Specialized feature methods for ML pipeline
+    
+    def compute_intraday_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute intraday features on minute bars for mean reversion strategy.
+        Expected columns: ['open','high','low','close','volume'] indexed by timestamp.
+        Returns a DataFrame with features aligned to input index (no future leakage).
+        
+        Args:
+            df: DataFrame with OHLCV data
+            
+        Returns:
+            DataFrame with intraday features
+        """
+        out = pd.DataFrame(index=df.index)
+        
+        # Price features
+        out['close'] = df['close']
+        out['ret_1'] = df['close'].pct_change()
+        
+        # Z-score of price over 20 bars
+        out['zscore_20'] = (df['close'] - df['close'].rolling(20).mean()) / (df['close'].rolling(20).std() + 1e-9)
+        
+        # RSI(14)
+        delta = df['close'].diff()
+        up = delta.clip(lower=0)
+        down = -delta.clip(upper=0)
+        roll_up = up.rolling(14).mean()
+        roll_down = down.rolling(14).mean()
+        rs = roll_up / (roll_down + 1e-9)
+        out['rsi_14'] = 100 - (100 / (1 + rs))
+        
+        # ATR(14) proxy from high-low range
+        tr = (df['high'] - df['low']).abs()
+        out['atr_14'] = tr.rolling(14).mean()
+        
+        # Volume z-score
+        out['vol_z'] = (df['volume'] - df['volume'].rolling(20).mean()) / (df['volume'].rolling(20).std() + 1e-9)
+        
+        # Spread proxy
+        out['spread_proxy'] = (df['high'] - df['low']) / (df['close'] + 1e-9)
+        
+        # Time-of-day bins (optional)
+        out['minute'] = out.index.minute
+        out['hour'] = out.index.hour
+        
+        return out.dropna()
+    
+    def compute_swing_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute swing features on daily bars for trend following strategy.
+        Expected columns: ['open','high','low','close','volume'] daily, index=timestamp.
+        
+        Args:
+            df: DataFrame with daily OHLCV data
+            
+        Returns:
+            DataFrame with swing features
+        """
+        out = pd.DataFrame(index=df.index)
+        
+        # Price features
+        out['close'] = df['close']
+        out['ema_20'] = df['close'].ewm(span=20).mean()
+        out['ema_50'] = df['close'].ewm(span=50).mean()
+        out['ema_20_slope'] = out['ema_20'].diff(5) / (out['ema_20'].shift(5) + 1e-9)
+        
+        # ADX proxy (simplified trend strength)
+        out['trend_strength'] = (out['ema_20'] - out['ema_50']) / (out['ema_50'] + 1e-9)
+        
+        # ATR(14) daily
+        tr = (df['high'] - df['low']).abs()
+        out['atr_14'] = tr.rolling(14).mean()
+        
+        # Volume z-score
+        out['vol_z'] = (df['volume'] - df['volume'].rolling(20).mean()) / (df['volume'].rolling(20).std() + 1e-9)
+        
+        return out.dropna()
+    
+    def save_features_simple(self, symbol: str, timeframe: str, features: pd.DataFrame) -> str:
+        """
+        Save features to parquet in feature_store_dir/{timeframe}/{symbol}.parquet
+        Simplified version for ML pipeline use.
+        
+        Args:
+            symbol: Stock symbol
+            timeframe: Timeframe (e.g., '1Min', '1Day')
+            features: DataFrame with features
+            
+        Returns:
+            Path to saved file
+        """
+        out_dir = self.feature_dir / timeframe
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{symbol}.parquet"
+        features.to_parquet(path, index=True)
+        logger.debug(f"Saved features for {symbol} to {path}")
+        return str(path)
+    
+    def load_features_simple(self, symbol: str, timeframe: str) -> pd.DataFrame:
+        """
+        Load features from parquet.
+        Simplified version for ML pipeline use.
+        
+        Args:
+            symbol: Stock symbol
+            timeframe: Timeframe (e.g., '1Min', '1Day')
+            
+        Returns:
+            DataFrame with features
+        """
+        path = self.feature_dir / timeframe / f"{symbol}.parquet"
+        if not path.exists():
+            logger.warning(f"No features found at {path}")
+            return pd.DataFrame()
+        return pd.read_parquet(path)
