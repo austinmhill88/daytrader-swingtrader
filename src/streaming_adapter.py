@@ -10,6 +10,13 @@ from loguru import logger
 from collections import defaultdict
 import pandas as pd
 
+try:
+    import websockets
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:
+    WEBSOCKETS_AVAILABLE = False
+    logger.warning("websockets library not available - streaming disabled")
+
 
 class StreamingDataAdapter:
     """
@@ -107,8 +114,11 @@ class StreamingDataAdapter:
             logger.warning("Polygon API key not configured")
             return
         
+        if not WEBSOCKETS_AVAILABLE:
+            logger.error("websockets library not installed")
+            return
+        
         try:
-            import websockets
             
             uri = f"wss://socket.polygon.io/stocks"
             
@@ -152,8 +162,11 @@ class StreamingDataAdapter:
             logger.warning("Alpaca credentials not configured")
             return
         
+        if not WEBSOCKETS_AVAILABLE:
+            logger.error("websockets library not installed")
+            return
+        
         try:
-            import websockets
             
             uri = "wss://stream.data.alpaca.markets/v2/iex"
             

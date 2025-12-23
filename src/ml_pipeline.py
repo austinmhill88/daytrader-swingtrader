@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
+import traceback
 
 from src.feature_store import FeatureStore
 from src.ml_trainer import MLModelTrainer
@@ -249,7 +250,6 @@ class MLPipeline:
             
         except Exception as e:
             logger.error(f"Error training model for {strategy_name}: {e}")
-            import traceback
             logger.error(traceback.format_exc())
             return None
     

@@ -9,6 +9,13 @@ from datetime import datetime, timedelta
 from loguru import logger
 from collections import deque
 
+try:
+    from scipy import stats
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
+    logger.warning("scipy not available - some drift detection features disabled")
+
 
 class EnhancedAlertManager:
     """
@@ -73,8 +80,11 @@ class EnhancedAlertManager:
         Returns:
             Alert dict if drift detected, None otherwise
         """
+        if not SCIPY_AVAILABLE:
+            logger.warning("scipy not available, skipping drift detection")
+            return None
+        
         try:
-            from scipy import stats
             
             # Kolmogorov-Smirnov test
             ks_stat, ks_pval = stats.ks_2samp(train_distribution, prod_distribution)

@@ -5,7 +5,7 @@ import alpaca_trade_api as tradeapi
 from alpaca_trade_api.rest import APIError, TimeFrame
 from loguru import logger
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from src.models import Position, Bar
 
@@ -373,7 +373,6 @@ class AlpacaClient:
                     if batch_bars:
                         last_ts = batch_bars[-1].ts
                         # Add small increment to avoid duplicate
-                        from datetime import timedelta
                         current_start = (last_ts + timedelta(seconds=1)).isoformat()
                         logger.debug(f"Paginating: fetched {len(batch_bars)} bars, next start: {current_start}")
                     else:

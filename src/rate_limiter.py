@@ -9,6 +9,11 @@ from collections import deque
 from loguru import logger
 
 
+class RateLimitError(Exception):
+    """Custom exception for rate limit errors."""
+    pass
+
+
 class RateLimiter:
     """
     Rate limiter with exponential backoff for API calls.
@@ -167,12 +172,12 @@ class RateLimiter:
                         )
                     else:
                         logger.error(f"Rate limit error, max retries exhausted")
-                        raise
+                        raise RateLimitError(f"Rate limit exceeded after {max_retries} retries")
                 else:
                     # Not a rate limit error, re-raise immediately
                     raise
         
-        raise Exception(f"Failed after {max_retries} retries")
+        raise RateLimitError(f"Failed after {max_retries} retries")
     
     def execute_batch(
         self,

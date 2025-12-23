@@ -328,7 +328,7 @@ class CapitalAllocator:
             'avg_win': avg_win,
             'avg_loss': avg_loss,
             'num_trades': len(trades),
-            'last_updated': pd.Timestamp.now()
+            'last_updated': datetime.now().isoformat()
         }
         
         logger.debug(
