@@ -493,79 +493,80 @@ class MLPipeline:
             logger.error("joblib not installed")
             return {"promotion_passed": False, "reason": "missing_joblib"}
         
-        logger.info(f"Training intraday mean reversion model on {len(symbols)} symbols")
-        
-        # Prepare dataset
-        datasets = self._prepare_intraday_dataset(
-            symbols,
-            lookback_days=self.config['universe'].get('adv_lookback_days', 60)
-        )
-        
-        if not datasets:
-            logger.error("No datasets prepared for training")
-            return {"promotion_passed": False, "reason": "no_data"}
-        
-        # Pooled dataset (simple baseline)
-        pooled = pd.concat(datasets.values(), axis=0)
-        if len(pooled) < 1000:
-            logger.error("Insufficient training data")
-            return {"promotion_passed": False, "reason": "insufficient_data"}
-        
-        X = pooled.drop(columns=['target'])
-        y = pooled['target']
-        
-        # Train/validation split by time (simple)
-        split = int(0.8 * len(pooled))
-        X_train, y_train = X.iloc[:split], y.iloc[:split]
-        X_test, y_test = X.iloc[split:], y.iloc[split:]
-        
-        logger.info(f"Training on {len(X_train)} samples, testing on {len(X_test)} samples")
-        
-        # Train model
-        model = lgb.LGBMRegressor(n_estimators=300, learning_rate=0.05, max_depth=5)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        
-        # Simple metrics (directional hit-rate and rough Sharpe proxy)
-        hit_rate = (np.sign(y_pred) == np.sign(y_test)).mean()
-        returns = pd.Series(y_test.values)
-        sharpe = returns.mean() / (returns.std() + 1e-9) * (252 ** 0.5) if returns.std() > 0 else 0
-        
-        # Placeholder metrics (replace with backtest-driven metrics in production)
-        max_drawdown_pct = 0.0
-        num_trades = len(X_test)
-        win_rate = hit_rate
-        
-        # Check promotion gates
-        passed = (
-            sharpe >= self.gates['min_sharpe'] and
-            max_drawdown_pct <= self.gates['max_drawdown_pct'] and
-            num_trades >= self.gates['min_trades'] and
-            win_rate >= self.gates['min_win_rate']
-        )
-        
-        result = {
-            "promotion_passed": passed,
-            "metrics": {
-                "sharpe_ratio": float(sharpe),
-                "max_drawdown_pct": float(max_drawdown_pct),
-                "num_trades": int(num_trades),
-                "win_rate": float(win_rate),
-                "hit_rate": float(hit_rate)
+        try:
+            logger.info(f"Training intraday mean reversion model on {len(symbols)} symbols")
+            
+            # Prepare dataset
+            datasets = self._prepare_intraday_dataset(
+                symbols,
+                lookback_days=self.config['universe'].get('adv_lookback_days', 60)
+            )
+            
+            if not datasets:
+                logger.error("No datasets prepared for training")
+                return {"promotion_passed": False, "reason": "no_data"}
+            
+            # Pooled dataset (simple baseline)
+            pooled = pd.concat(datasets.values(), axis=0)
+            if len(pooled) < 1000:
+                logger.error("Insufficient training data")
+                return {"promotion_passed": False, "reason": "insufficient_data"}
+            
+            X = pooled.drop(columns=['target'])
+            y = pooled['target']
+            
+            # Train/validation split by time (simple)
+            split = int(0.8 * len(pooled))
+            X_train, y_train = X.iloc[:split], y.iloc[:split]
+            X_test, y_test = X.iloc[split:], y.iloc[split:]
+            
+            logger.info(f"Training on {len(X_train)} samples, testing on {len(X_test)} samples")
+            
+            # Train model
+            model = lgb.LGBMRegressor(n_estimators=300, learning_rate=0.05, max_depth=5)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            
+            # Simple metrics (directional hit-rate and rough Sharpe proxy)
+            hit_rate = (np.sign(y_pred) == np.sign(y_test)).mean()
+            returns = pd.Series(y_test.values)
+            sharpe = returns.mean() / (returns.std() + 1e-9) * (252 ** 0.5) if returns.std() > 0 else 0
+            
+            # Placeholder metrics (replace with backtest-driven metrics in production)
+            max_drawdown_pct = 0.0
+            num_trades = len(X_test)
+            win_rate = hit_rate
+            
+            # Check promotion gates
+            passed = (
+                sharpe >= self.gates['min_sharpe'] and
+                max_drawdown_pct <= self.gates['max_drawdown_pct'] and
+                num_trades >= self.gates['min_trades'] and
+                win_rate >= self.gates['min_win_rate']
+            )
+            
+            result = {
+                "promotion_passed": passed,
+                "metrics": {
+                    "sharpe_ratio": float(sharpe),
+                    "max_drawdown_pct": float(max_drawdown_pct),
+                    "num_trades": int(num_trades),
+                    "win_rate": float(win_rate),
+                    "hit_rate": float(hit_rate)
+                }
             }
-        }
-        
-        # Save and register model if passed gates
-        if passed:
-            artifact_path = Path(self.registry.model_dir) / "intraday_mean_reversion_lgb.pkl"
-            joblib.dump(model, artifact_path)
-            self.registry.register_model("intraday_mean_reversion", str(artifact_path), result["metrics"])
-            logger.info(f"Model promoted and registered: intraday_mean_reversion | Sharpe: {sharpe:.2f}")
-        else:
-            logger.warning(f"Model not promoted. Metrics: {result['metrics']}")
-        
-        return result
-        
+            
+            # Save and register model if passed gates
+            if passed:
+                artifact_path = Path(self.registry.model_dir) / "intraday_mean_reversion_lgb.pkl"
+                joblib.dump(model, artifact_path)
+                self.registry.register_model("intraday_mean_reversion", str(artifact_path), result["metrics"])
+                logger.info(f"Model promoted and registered: intraday_mean_reversion | Sharpe: {sharpe:.2f}")
+            else:
+                logger.warning(f"Model not promoted. Metrics: {result['metrics']}")
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error training intraday mean reversion: {e}")
             logger.error(traceback.format_exc())
