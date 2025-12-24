@@ -45,6 +45,21 @@ A robust, production-ready automated trading system with ML-driven strategies, c
 - **Command Interface**: API/CLI for manual controls
 - **System Status**: Comprehensive health and performance monitoring
 
+### 🤖 AI Runtime & Tools (NEW!)
+- **Local AI Server**: Run LLMs locally with NVIDIA GPU acceleration (RTX 5070 support)
+- **Ollama-Compatible API**: Drop-in replacement for Ollama with /api/chat and /api/generate
+- **Web Browsing**: Unrestricted web access without API quotas or third-party dependencies
+- **File Sandbox**: Controlled file access with read/write permissions and glob patterns
+- **Trading Integration**: AI-powered trade analysis, risk assessment, and daily summaries
+- **Model Support**: GGUF models via llama.cpp (Qwen, Llama, Mistral, etc.)
+
+### 🖥️ Windows GUI (NEW!)
+- **Real-Time Dashboard**: Live positions, P&L, and system metrics
+- **Equity Curve Visualization**: Track account performance over time
+- **AI Assistant Console**: Interactive chat interface for trading insights
+- **Control Panel**: Pause/resume trading, emergency stop, system status
+- **PyQt6 Interface**: Modern, responsive Windows desktop application
+
 ### Risk Controls
 - Daily maximum drawdown limits with automatic kill-switch
 - Per-trade risk limits based on ATR
@@ -78,15 +93,44 @@ APCA_API_SECRET_KEY=your_secret_key_here
 APCA_API_BASE_URL=https://paper-api.alpaca.markets
 # Optional: Finnhub for earnings blackout calendar
 FINNHUB_API_KEY=your_finnhub_key_here
+
+# AI Server (Optional)
+MODELS_DIR=C:/models
+DAYTRADER_ROOT=C:/daytrader-swingtrader
 ```
 
-### 3. Paper Trading (REQUIRED)
+Configure AI server (optional - see [AI_SERVER_GUIDE.md](AI_SERVER_GUIDE.md)):
+```bash
+# Download GGUF model (e.g., Qwen 2.5 3B)
+# Edit config/ai-coder.yaml with model path
+# Enable in config/config.yaml: ai_server.enabled: true
+```
 
+### 3. Running the System
+
+**Option 1: Trading Bot Only (Headless)**
 ```bash
 python -m src.main --config config/config.yaml --paper
 ```
 
+**Option 2: With GUI (Recommended for Windows)**
+```bash
+python launcher.py --paper
+```
+
+**Option 3: With AI Server + GUI**
+```bash
+python launcher.py --with-ai --paper
+```
+
+**Option 4: AI Server Only**
+```bash
+python -m server.main
+```
+
 **Monitor for at least 2-4 weeks before considering live trading!**
+
+See [GUI_GUIDE.md](GUI_GUIDE.md) for detailed GUI usage instructions.
 
 ## 📊 System Architecture
 
@@ -242,8 +286,67 @@ fills = system.metrics_tracker.get_fill_quality_summary(minutes=60)
 
 Logs are written to `logs/` directory:
 - `runtime.log` - General application logs
-- `errors.log` - Error-level logs  
+- `errors.log` - Error-level logs
 - `trades.log` - Trade activities
+- `ai_tools.log` - AI server requests/responses (if enabled)
+
+## 🖥️ GUI Application
+
+The Windows GUI provides real-time monitoring and control:
+
+### Features
+- **Live Dashboard**: Positions, P&L, exposure metrics
+- **Equity Curve**: Real-time account value tracking
+- **AI Console**: Interactive trading assistant
+- **System Controls**: Pause, resume, emergency stop
+
+### Usage
+```python
+# Launch with integrated trading system
+python launcher.py
+
+# GUI only (system running separately)
+python launcher.py --gui-only
+
+# With AI server
+python launcher.py --with-ai
+```
+
+See [GUI_GUIDE.md](GUI_GUIDE.md) for complete documentation.
+
+## 🤖 AI Server
+
+Local AI runtime with GPU acceleration:
+
+### Features
+- **Ollama-Compatible API**: /api/chat, /api/generate, /api/tags
+- **Web Tools**: Fetch pages, search via SearxNG
+- **File Access**: Safe file operations within sandbox
+- **GPU Acceleration**: Full NVIDIA RTX 5070 support
+
+### Setup
+1. Install CUDA 12.1 or 11.8
+2. Install llama-cpp-python with CUDA support
+3. Download GGUF models (Qwen 2.5 3B recommended)
+4. Configure config/ai-coder.yaml
+5. Start server: `python -m server.main`
+
+### API Examples
+```bash
+# Chat completion
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen2.5:3b-instruct", 
+       "messages": [{"role": "user", "content": "Explain risk management"}]}'
+
+# Fetch web page
+curl "http://127.0.0.1:8000/web/fetch?url=https://example.com"
+
+# Read log file
+curl "http://127.0.0.1:8000/fs/tail?path=logs/trades.log&lines=50"
+```
+
+See [AI_SERVER_GUIDE.md](AI_SERVER_GUIDE.md) for complete documentation.
 
 ## 🔐 Security Best Practices
 
