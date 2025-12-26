@@ -1,18 +1,20 @@
 """
 Dynamic position sizing via regime detection and volatility targeting (Phase 3).
 Adjusts position sizes based on market regime and volatility conditions.
+Includes EWMA volatility targeting and ADV-based constraints.
 """
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Tuple
 from loguru import logger
 from datetime import datetime
+from collections import defaultdict
 
 
 class DynamicSizer:
     """
     Dynamic position sizing based on regime and volatility.
-    Phase 3 implementation for execution sophistication.
+    Phase 3 implementation for execution sophistication with EWMA volatility targeting.
     """
     
     def __init__(self, config: Dict):
@@ -25,6 +27,7 @@ class DynamicSizer:
         self.config = config
         risk_config = config.get('risk', {})
         regime_config = config.get('regime', {})
+        sizing_config = risk_config.get('dynamic_sizing', {})
         
         # Base sizing parameters
         self.base_per_trade_risk_pct = risk_config.get('per_trade_risk_pct', 0.4)
@@ -33,16 +36,35 @@ class DynamicSizer:
         # Regime-based adjustments
         self.regime_enabled = regime_config.get('enabled', False)
         
-        # Volatility targeting
-        self.target_volatility = 0.15  # 15% annualized target
-        self.vol_scaling_enabled = True
+        # EWMA volatility targeting
+        self.enable_vol_targeting = sizing_config.get('enable_vol_targeting', True)
+        self.target_portfolio_volatility = sizing_config.get('target_portfolio_volatility', 0.10)  # 10% annualized
+        self.vol_ewma_span = sizing_config.get('vol_ewma_span', 20)  # EWMA span for volatility
+        self.vol_lookback_days = sizing_config.get('vol_lookback_days', 60)  # Lookback for realized vol
+        
+        # Per-symbol EWMA volatility tracking
+        self.symbol_ewma_vols: Dict[str, float] = {}
+        self.symbol_vol_history: Dict[str, list] = defaultdict(list)
+        
+        # Portfolio volatility state
+        self.portfolio_realized_vol = None
+        self.portfolio_vol_history = []
+        
+        # ADV-based participation constraints
+        self.enable_adv_constraints = sizing_config.get('enable_adv_constraints', True)
+        self.max_participation_rate_intraday = sizing_config.get('max_participation_rate_intraday', 0.01)  # 1% of ADV
+        self.max_participation_rate_swing = sizing_config.get('max_participation_rate_swing', 0.02)  # 2% of ADV
+        self.min_adv_usd = config.get('universe', {}).get('min_adv_usd', 1000000)  # $1M minimum ADV
         
         # Regime multipliers
         self.regime_multipliers = {
             'low_volatility': 1.2,    # More aggressive in low vol
             'medium_volatility': 1.0, # Normal sizing
             'high_volatility': 0.7,   # More conservative in high vol
-            'crisis': 0.3            # Very conservative in crisis
+            'crisis': 0.3,           # Very conservative in crisis
+            'trending_up': 1.1,
+            'trending_down': 0.8,
+            'ranging': 1.0
         }
         
         # Kelly criterion parameters
@@ -52,7 +74,9 @@ class DynamicSizer:
         logger.info(
             f"DynamicSizer initialized | "
             f"Base risk: {self.base_per_trade_risk_pct}%, "
-            f"Regime-based: {self.regime_enabled}"
+            f"Vol targeting: {self.enable_vol_targeting}, "
+            f"Target vol: {self.target_portfolio_volatility:.1%}, "
+            f"ADV constraints: {self.enable_adv_constraints}"
         )
     
     def calculate_position_size(
@@ -302,6 +326,193 @@ class DynamicSizer:
             return True, 0.75  # Reduce by 25%
         
         return False, 1.0
+    
+    def update_symbol_volatility(
+        self,
+        symbol: str,
+        returns: pd.Series
+    ) -> float:
+        """
+        Update EWMA volatility estimate for a symbol.
+        
+        Args:
+            symbol: Stock symbol
+            returns: Series of returns
+            
+        Returns:
+            Updated EWMA volatility (annualized)
+        """
+        if len(returns) == 0:
+            return 0.15  # Default 15% vol
+        
+        # Calculate EWMA volatility
+        ewma_vol = returns.ewm(span=self.vol_ewma_span).std().iloc[-1]
+        
+        # Annualize (assuming daily returns)
+        annualized_vol = ewma_vol * np.sqrt(252)
+        
+        # Store in cache
+        self.symbol_ewma_vols[symbol] = annualized_vol
+        
+        # Update history (keep last 100 observations)
+        self.symbol_vol_history[symbol].append(annualized_vol)
+        if len(self.symbol_vol_history[symbol]) > 100:
+            self.symbol_vol_history[symbol].pop(0)
+        
+        logger.debug(f"Updated EWMA vol for {symbol}: {annualized_vol:.2%}")
+        
+        return annualized_vol
+    
+    def get_symbol_volatility(self, symbol: str) -> float:
+        """
+        Get current EWMA volatility estimate for a symbol.
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            EWMA volatility (annualized)
+        """
+        return self.symbol_ewma_vols.get(symbol, 0.15)  # Default 15%
+    
+    def update_portfolio_volatility(
+        self,
+        portfolio_returns: pd.Series
+    ) -> float:
+        """
+        Update portfolio-level volatility estimate.
+        
+        Args:
+            portfolio_returns: Series of portfolio returns
+            
+        Returns:
+            Portfolio realized volatility (annualized)
+        """
+        if len(portfolio_returns) == 0:
+            return self.target_portfolio_volatility
+        
+        # Calculate EWMA portfolio volatility
+        realized_vol = portfolio_returns.ewm(span=self.vol_ewma_span).std().iloc[-1]
+        
+        # Annualize
+        annualized_vol = realized_vol * np.sqrt(252)
+        
+        self.portfolio_realized_vol = annualized_vol
+        
+        # Update history
+        self.portfolio_vol_history.append(annualized_vol)
+        if len(self.portfolio_vol_history) > 100:
+            self.portfolio_vol_history.pop(0)
+        
+        logger.info(f"Portfolio realized vol: {annualized_vol:.2%} (target: {self.target_portfolio_volatility:.2%})")
+        
+        return annualized_vol
+    
+    def calculate_vol_target_multiplier(self) -> float:
+        """
+        Calculate position size multiplier based on volatility targeting.
+        Scale positions to target portfolio volatility.
+        
+        Returns:
+            Multiplier for position sizing (0.5 to 2.0)
+        """
+        if not self.enable_vol_targeting or self.portfolio_realized_vol is None:
+            return 1.0
+        
+        # Calculate how much to scale positions
+        # If realized vol > target, scale down; if realized vol < target, scale up
+        multiplier = self.target_portfolio_volatility / self.portfolio_realized_vol
+        
+        # Clamp to reasonable range
+        multiplier = np.clip(multiplier, 0.5, 2.0)
+        
+        logger.debug(
+            f"Vol targeting multiplier: {multiplier:.2f} "
+            f"(realized: {self.portfolio_realized_vol:.2%}, target: {self.target_portfolio_volatility:.2%})"
+        )
+        
+        return multiplier
+    
+    def check_adv_constraints(
+        self,
+        symbol: str,
+        qty: int,
+        price: float,
+        adv_shares: Optional[float] = None,
+        strategy_type: str = 'intraday'
+    ) -> Tuple[bool, int, str]:
+        """
+        Check and enforce ADV-based participation rate constraints.
+        
+        Args:
+            symbol: Stock symbol
+            qty: Proposed quantity
+            price: Current price
+            adv_shares: Average daily volume in shares
+            strategy_type: 'intraday' or 'swing'
+            
+        Returns:
+            Tuple of (is_valid, adjusted_qty, reason)
+        """
+        if not self.enable_adv_constraints or adv_shares is None:
+            return True, qty, ""
+        
+        # Calculate ADV in USD
+        adv_usd = adv_shares * price
+        
+        # Check minimum ADV requirement
+        if adv_usd < self.min_adv_usd:
+            return False, 0, f"ADV ${adv_usd:,.0f} below minimum ${self.min_adv_usd:,.0f}"
+        
+        # Determine max participation rate
+        if strategy_type == 'intraday':
+            max_participation = self.max_participation_rate_intraday
+        else:
+            max_participation = self.max_participation_rate_swing
+        
+        # Calculate maximum quantity based on participation rate
+        max_qty = int(adv_shares * max_participation)
+        
+        if qty > max_qty:
+            logger.info(
+                f"ADV constraint for {symbol}: reducing {qty} -> {max_qty} shares "
+                f"({max_participation:.1%} of ADV)"
+            )
+            return True, max_qty, f"Reduced to {max_participation:.1%} of ADV"
+        
+        return True, qty, ""
+    
+    def calculate_dollar_risk_per_trade(
+        self,
+        equity: float,
+        symbol_vol: Optional[float] = None
+    ) -> float:
+        """
+        Calculate dollar risk per trade with volatility adjustment.
+        
+        Args:
+            equity: Current account equity
+            symbol_vol: Symbol's EWMA volatility (optional)
+            
+        Returns:
+            Dollar risk amount for this trade
+        """
+        # Base risk as percentage of equity
+        base_risk_dollars = equity * (self.base_per_trade_risk_pct / 100.0)
+        
+        # Adjust for portfolio volatility targeting
+        vol_multiplier = self.calculate_vol_target_multiplier()
+        base_risk_dollars *= vol_multiplier
+        
+        # Adjust for symbol-specific volatility if available
+        if symbol_vol is not None and self.enable_vol_targeting:
+            # Scale inversely with symbol volatility
+            # Higher vol stocks get smaller position sizes
+            symbol_vol_adjustment = 0.15 / symbol_vol  # 15% baseline
+            symbol_vol_adjustment = np.clip(symbol_vol_adjustment, 0.5, 2.0)
+            base_risk_dollars *= symbol_vol_adjustment
+        
+        return base_risk_dollars
     
     def get_sizing_summary(
         self,

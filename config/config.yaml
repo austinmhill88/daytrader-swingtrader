@@ -135,6 +135,37 @@ risk:
   # Phase 1: Enhanced risk metrics
   enable_weekly_kill_switch: false
   weekly_max_drawdown_pct: 7.0
+  # Phase 5: Dynamic sizing and volatility targeting
+  dynamic_sizing:
+    enable_vol_targeting: true  # Enable portfolio volatility targeting
+    target_portfolio_volatility: 0.10  # Target 10% annualized portfolio volatility
+    vol_ewma_span: 20  # EWMA span for volatility calculation
+    vol_lookback_days: 60  # Lookback period for realized volatility
+    enable_adv_constraints: true  # Enforce ADV-based participation limits
+    max_participation_rate_intraday: 0.01  # Max 1% of ADV for intraday
+    max_participation_rate_swing: 0.02  # Max 2% of ADV for swing trades
+  # Phase 5: Per-strategy risk budgets
+  strategy_risk_budgets:
+    swing_trend_following: 0.60  # 60% of total risk budget
+    intraday_mean_reversion: 0.40  # 40% of total risk budget
+    # Adjust weights dynamically based on regime
+    regime_adjustments:
+      enable: true
+      trending_up:
+        swing_trend_following: 0.70
+        intraday_mean_reversion: 0.30
+      trending_down:
+        swing_trend_following: 0.50
+        intraday_mean_reversion: 0.50
+      ranging:
+        swing_trend_following: 0.40
+        intraday_mean_reversion: 0.60
+      high_volatility:
+        swing_trend_following: 0.50
+        intraday_mean_reversion: 0.50
+      crisis:
+        swing_trend_following: 0.30
+        intraday_mean_reversion: 0.30  # Reduce both in crisis
   
 execution:
   default_order_type: "limit"
