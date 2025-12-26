@@ -71,7 +71,8 @@ class RegimeDetector:
     
     def calculate_regime_features(self, reference_symbol: str = 'SPY') -> Dict[str, float]:
         """
-        Calculate regime features.
+        Calculate regime features with multi-signal approach.
+        Includes trend, volatility, breadth, and liquidity indicators.
         
         Args:
             reference_symbol: Reference symbol for regime calculation (default: SPY)
@@ -96,8 +97,7 @@ class RegimeDetector:
         realized_vol = df['returns'].std() * np.sqrt(252)
         features['realized_vol'] = realized_vol
         
-        # 2. Trend Strength (using ADX-like calculation)
-        # Simplified: use EMA slope
+        # 2. Trend Strength (using EMA slope)
         df['ema20'] = df['close'].ewm(span=20).mean()
         df['ema_slope'] = (df['ema20'] - df['ema20'].shift(5)) / df['ema20'].shift(5)
         trend_strength = abs(df['ema_slope'].iloc[-1])
@@ -117,28 +117,62 @@ class RegimeDetector:
         vix_proxy = df['range_pct'].rolling(20).mean().iloc[-1]
         features['vix_proxy'] = vix_proxy
         
-        # 5. Market Breadth (if we have multiple symbols)
+        # 5. Market Breadth (advancers vs decliners)
         if len(self.market_data) > 1:
             positive_symbols = 0
             total_symbols = 0
+            advancing_symbols = []
+            declining_symbols = []
             
             for symbol, symbol_df in self.market_data.items():
                 if len(symbol_df) >= 20:
                     # Use a copy to avoid modifying cached data
                     df_copy = symbol_df.copy()
                     df_copy['returns'] = df_copy['close'].pct_change()
+                    
+                    # Check today's return
                     if df_copy['returns'].iloc[-1] > 0:
                         positive_symbols += 1
+                        advancing_symbols.append(symbol)
+                    else:
+                        declining_symbols.append(symbol)
                     total_symbols += 1
             
             if total_symbols > 0:
-                features['breadth'] = positive_symbols / total_symbols
+                breadth = positive_symbols / total_symbols
+                features['breadth'] = breadth
+                features['advance_decline_ratio'] = positive_symbols / max(1, total_symbols - positive_symbols)
+                features['num_advancing'] = positive_symbols
+                features['num_declining'] = total_symbols - positive_symbols
             else:
                 features['breadth'] = 0.5  # Neutral
+                features['advance_decline_ratio'] = 1.0
         else:
             features['breadth'] = 0.5  # Neutral (no data)
+            features['advance_decline_ratio'] = 1.0
         
-        # 6. Correlation (if we have SPY and QQQ)
+        # 6. Percent Above Moving Average (breadth indicator)
+        if len(self.market_data) > 5:
+            above_ma = 0
+            total = 0
+            
+            for symbol, symbol_df in self.market_data.items():
+                if len(symbol_df) >= 50:
+                    df_copy = symbol_df.copy()
+                    df_copy['ma50'] = df_copy['close'].rolling(50).mean()
+                    
+                    if df_copy['close'].iloc[-1] > df_copy['ma50'].iloc[-1]:
+                        above_ma += 1
+                    total += 1
+            
+            if total > 0:
+                features['pct_above_ma50'] = above_ma / total
+            else:
+                features['pct_above_ma50'] = 0.5
+        else:
+            features['pct_above_ma50'] = 0.5
+        
+        # 7. Correlation (if we have SPY and QQQ)
         if 'SPY' in self.market_data and 'QQQ' in self.market_data:
             spy_df = self.market_data['SPY']
             qqq_df = self.market_data['QQQ']
@@ -149,11 +183,28 @@ class RegimeDetector:
                 correlation = spy_returns.corr(qqq_returns)
                 features['spy_qqq_correlation'] = correlation
         
+        # 8. Liquidity indicator (average spread if available)
+        # This would require bid/ask data - placeholder for now
+        features['liquidity_score'] = 1.0  # Placeholder (1.0 = normal liquidity)
+        
+        # 9. Returns slope (linear regression on recent returns)
+        if len(df) >= 20:
+            recent_returns = df['returns'].tail(20).values
+            x = np.arange(len(recent_returns))
+            if len(recent_returns) > 1 and not np.all(np.isnan(recent_returns)):
+                # Simple linear regression slope
+                slope = np.polyfit(x[~np.isnan(recent_returns)], 
+                                 recent_returns[~np.isnan(recent_returns)], 1)[0]
+                features['returns_slope'] = slope
+            else:
+                features['returns_slope'] = 0.0
+        
         return features
     
     def detect_regime(self, reference_symbol: str = 'SPY') -> RegimeType:
         """
-        Detect current market regime.
+        Detect current market regime using multi-signal approach.
+        Considers trend, volatility, breadth, and liquidity.
         
         Args:
             reference_symbol: Reference symbol for regime detection
@@ -169,11 +220,13 @@ class RegimeDetector:
         if not features:
             return RegimeType.MEDIUM_VOL  # Default
         
-        # Threshold-based regime detection
+        # Extract features
         realized_vol = features.get('realized_vol', 0.15)
         trend_strength = features.get('trend_strength', 0)
         trend_direction = features.get('trend_direction', 0)
         vix_proxy = features.get('vix_proxy', 0.02)
+        breadth = features.get('breadth', 0.5)
+        pct_above_ma50 = features.get('pct_above_ma50', 0.5)
         
         # Detect volatility regime
         if realized_vol < self.low_vol_threshold:
@@ -185,21 +238,40 @@ class RegimeDetector:
         else:
             vol_regime = RegimeType.CRISIS
         
-        # Detect trend regime
-        if trend_strength > 0.02 and trend_direction > 0:
-            trend_regime = RegimeType.TRENDING_UP
-        elif trend_strength > 0.02 and trend_direction < 0:
-            trend_regime = RegimeType.TRENDING_DOWN
+        # Detect trend regime with breadth confirmation
+        # Strong trend requires both directional momentum AND breadth support
+        if trend_strength > 0.02:
+            if trend_direction > 0:
+                # Uptrend - check breadth confirmation
+                if breadth > 0.6 or pct_above_ma50 > 0.6:
+                    trend_regime = RegimeType.TRENDING_UP
+                else:
+                    # Weak breadth suggests false breakout
+                    trend_regime = RegimeType.RANGING
+            elif trend_direction < 0:
+                # Downtrend - check breadth confirmation
+                if breadth < 0.4 or pct_above_ma50 < 0.4:
+                    trend_regime = RegimeType.TRENDING_DOWN
+                else:
+                    # Weak breadth suggests false breakdown
+                    trend_regime = RegimeType.RANGING
+            else:
+                trend_regime = RegimeType.RANGING
         else:
             trend_regime = RegimeType.RANGING
         
-        # Combined regime (prioritize crisis/high vol)
+        # Combined regime (prioritize crisis/high vol, then incorporate breadth)
         if vol_regime == RegimeType.CRISIS:
             regime = RegimeType.CRISIS
         elif vol_regime == RegimeType.HIGH_VOL:
-            regime = RegimeType.HIGH_VOL
+            # High vol can still have trend
+            if trend_regime in [RegimeType.TRENDING_UP, RegimeType.TRENDING_DOWN]:
+                # High vol + trend = still use trend regime but risk is elevated
+                regime = trend_regime
+            else:
+                regime = RegimeType.HIGH_VOL
         else:
-            # Use trend regime for low/medium vol
+            # Low/medium vol - use trend regime
             regime = trend_regime
         
         # Update regime if changed
@@ -210,7 +282,7 @@ class RegimeDetector:
     
     def _update_regime(self, new_regime: RegimeType, features: Dict) -> None:
         """
-        Update current regime and log transition.
+        Update current regime and log transition with detailed metrics.
         
         Args:
             new_regime: New regime type
@@ -225,21 +297,47 @@ class RegimeDetector:
         if old_regime is not None:
             duration = (now - self.regime_start_time).total_seconds() / 60  # minutes
             
+            # Enhanced logging with key metrics
             logger.info(
-                f"Regime transition | "
-                f"{old_regime.value} -> {new_regime.value} | "
+                f"🔄 Regime Transition | "
+                f"{old_regime.value} → {new_regime.value} | "
                 f"Duration: {duration:.1f}m | "
-                f"RealizedVol: {features.get('realized_vol', 0):.3f}"
+                f"Vol: {features.get('realized_vol', 0):.2%}, "
+                f"Breadth: {features.get('breadth', 0.5):.1%}, "
+                f"Trend: {features.get('trend_strength', 0):.3f}, "
+                f"%>MA50: {features.get('pct_above_ma50', 0.5):.1%}"
             )
             
-            self.regime_history.append({
-                'start_time': self.regime_start_time,
-                'end_time': now,
-                'regime': old_regime.value,
-                'duration_minutes': duration
-            })
+            # Record detailed transition
+            transition_record = {
+                'start_time': self.regime_start_time.isoformat(),
+                'end_time': now.isoformat(),
+                'old_regime': old_regime.value,
+                'new_regime': new_regime.value,
+                'duration_minutes': duration,
+                'features_at_transition': {
+                    'realized_vol': features.get('realized_vol', 0),
+                    'breadth': features.get('breadth', 0.5),
+                    'trend_strength': features.get('trend_strength', 0),
+                    'trend_direction': features.get('trend_direction', 0),
+                    'pct_above_ma50': features.get('pct_above_ma50', 0.5),
+                    'advance_decline_ratio': features.get('advance_decline_ratio', 1.0),
+                    'vix_proxy': features.get('vix_proxy', 0),
+                    'returns_slope': features.get('returns_slope', 0)
+                }
+            }
+            
+            self.regime_history.append(transition_record)
+            
+            # Keep last 100 transitions
+            if len(self.regime_history) > 100:
+                self.regime_history.pop(0)
         else:
-            logger.info(f"Initial regime detected: {new_regime.value}")
+            logger.info(
+                f"📊 Initial Regime | {new_regime.value} | "
+                f"Vol: {features.get('realized_vol', 0):.2%}, "
+                f"Breadth: {features.get('breadth', 0.5):.1%}"
+            )
         
         self.regime_start_time = now
     
@@ -324,7 +422,7 @@ class RegimeDetector:
     
     def get_regime_summary(self) -> Dict:
         """
-        Get summary of current regime.
+        Get summary of current regime with detailed metrics.
         
         Returns:
             Dictionary with regime information
@@ -339,9 +437,73 @@ class RegimeDetector:
         if self.regime_start_time:
             duration_minutes = (datetime.now() - self.regime_start_time).total_seconds() / 60
         
+        # Get current features
+        current_features = self.calculate_regime_features()
+        
         return {
             'enabled': True,
             'current_regime': self.current_regime.value if self.current_regime else 'Unknown',
             'duration_minutes': duration_minutes,
-            'num_transitions': len(self.regime_history)
+            'num_transitions': len(self.regime_history),
+            'features': {
+                'realized_vol': current_features.get('realized_vol', 0),
+                'breadth': current_features.get('breadth', 0.5),
+                'pct_above_ma50': current_features.get('pct_above_ma50', 0.5),
+                'trend_strength': current_features.get('trend_strength', 0),
+                'advance_decline_ratio': current_features.get('advance_decline_ratio', 1.0)
+            }
+        }
+    
+    def get_regime_history_stats(self) -> Dict:
+        """
+        Get statistics on regime history.
+        
+        Returns:
+            Dictionary with regime statistics
+        """
+        if not self.regime_history:
+            return {}
+        
+        # Count time in each regime
+        regime_durations = {}
+        for record in self.regime_history:
+            regime = record.get('old_regime', record.get('regime'))
+            duration = record.get('duration_minutes', 0)
+            
+            if regime in regime_durations:
+                regime_durations[regime] += duration
+            else:
+                regime_durations[regime] = duration
+        
+        # Calculate percentages
+        total_duration = sum(regime_durations.values())
+        regime_percentages = {
+            regime: (duration / total_duration * 100) if total_duration > 0 else 0
+            for regime, duration in regime_durations.items()
+        }
+        
+        # Average features per regime
+        regime_features = {}
+        for record in self.regime_history:
+            if 'features_at_transition' in record:
+                regime = record['old_regime']
+                if regime not in regime_features:
+                    regime_features[regime] = []
+                regime_features[regime].append(record['features_at_transition'])
+        
+        # Average features
+        avg_features_by_regime = {}
+        for regime, feature_list in regime_features.items():
+            if feature_list:
+                avg_features = {}
+                for key in feature_list[0].keys():
+                    values = [f.get(key, 0) for f in feature_list]
+                    avg_features[key] = np.mean(values)
+                avg_features_by_regime[regime] = avg_features
+        
+        return {
+            'regime_durations_minutes': regime_durations,
+            'regime_percentages': regime_percentages,
+            'total_transitions': len(self.regime_history),
+            'avg_features_by_regime': avg_features_by_regime
         }
