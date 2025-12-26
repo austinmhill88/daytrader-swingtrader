@@ -1,0 +1,266 @@
+environment: paper  # "paper" or "live"
+
+alpaca:
+  key_id: PK7PJAFUMA3AUF6V42JTFZ3GFN
+  secret_key: Cyf3DF2MAcLEy2tfv83TdmLkee8qstPPw87a8fWeEQ8R
+  base_url: https://paper-api.alpaca.markets
+  data_feed: "iex"  # "iex" or "sip" (requires subscription)
+  reconnect_attempts: 5
+  reconnect_delay: 10  # seconds
+
+# Phase 1: Multi-source data configuration
+  data_sources:
+    primary: "alpaca"  # alpaca, polygon, tiingo, iex
+    secondary: []  # fallback sources
+    polygon:
+      api_key: ${POLYGON_API_KEY}
+    tiingo:
+      api_key: ${TIINGO_API_KEY}
+    iex:
+      api_key: ${IEX_API_KEY}
+    finnhub:
+      api_key: ${FINNHUB_API_KEY}
+
+# Phase 1: Data storage configuration
+data_storage:
+  format: "parquet"  # parquet, csv, hdf5
+  base_path: "./data"
+  partitioning:
+    by_symbol: true
+    by_date: true
+  compression: "snappy"
+  enable_versioning: true
+  
+universe:
+  min_price: 5.0
+  max_spread_bps: 50
+  adv_lookback_days: 60
+  top_by_dollar_volume: 500
+  # Universe tiers for Phase 1
+  tiers:
+    core: 200
+    extended: 1000
+  # Analytics for universe selection
+  analytics:
+    enable_liquidity_scoring: true
+    enable_volatility_bucketing: true
+    min_adv_usd: 1000000  # minimum average dollar volume
+  # Default universe for demo (override with dynamic universe builder)
+  default_symbols:
+    - AAPL
+    - MSFT
+    - AMZN
+    - NVDA
+    - GOOGL
+    - TSLA
+    - META
+    - SPY
+    - QQQ
+  earnings_blackout:
+    enabled: true
+    days_before: 2
+    days_after: 1
+    lookahead_days: 14  # calendar fetch range (today +/- window)
+
+strategies:
+  intraday_mean_reversion:
+    enabled: true
+    min_bar_minutes: 1
+    zscore_entry: 2.0
+    zscore_exit: 0.5
+    atr_stop_multiplier: 1.5
+    max_positions: 20
+    min_volume: 100000  # minimum daily volume
+    time_filters:
+      skip_first_minutes: 3
+      reduce_last_minutes: 5
+      flatten_eod: true
+    lookback_periods:
+      zscore_window: 20
+      atr_window: 14
+      vwap_window: 20
+    # Phase 2: ML model configuration
+    ml_model:
+      enabled: true
+      model_type: "lightgbm"  # lightgbm, xgboost, random_forest
+      features: ["zscore", "rsi", "atr", "volume_zscore", "spread"]
+      
+  swing_trend_following:
+    enabled: true
+    ema_fast: 20
+    ema_slow: 50
+    adx_threshold: 20
+    atr_stop_multiplier: 2.0
+    trailing_atr_multiplier: 3.0
+    max_positions: 10
+    min_adx: 15
+    holding_period_min: 1  # days
+    holding_period_max: 10  # days
+    pullback_threshold_pct: 2.0
+    # Phase 2: ML model configuration
+    ml_model:
+      enabled: true
+      model_type: "lightgbm"
+      features: ["ema_slope", "adx", "atr", "volume_zscore", "trend_strength"]
+
+# Phase 1: Regime detection configuration
+regime:
+  enabled: true  # Enable regime-based adjustments
+  method: "threshold"  # threshold, hmm, markov_switching
+  indicators:
+    - vix_proxy
+    - realized_volatility
+    - breadth
+    - correlation
+  volatility_regimes:
+    low: 0.10
+    medium: 0.20
+    high: 0.30
+
+risk:
+  daily_max_drawdown_pct: 2.0
+  per_trade_risk_pct: 0.4
+  max_position_size_pct: 5.0  # max % of equity per position
+  max_position_per_symbol_pct: 10.0  # max % of equity per symbol (allows adding to position)
+  max_qty_per_symbol: null  # optional absolute quantity limit per symbol
+  max_gross_exposure_pct_intraday: 50
+  max_gross_exposure_pct_swing: 100
+  short_exposure_cap_pct: 50
+  kill_switch: true
+  max_positions_total: 30
+  min_trade_size_usd: 100
+  max_trade_size_usd: 50000
+  max_trades_per_day: 100
+  max_losses_per_day: 3  # consecutive losses before pause
+  # Phase 1: Enhanced risk metrics
+  enable_weekly_kill_switch: false
+  weekly_max_drawdown_pct: 7.0
+  
+execution:
+  default_order_type: "limit"
+  max_child_order_pct: 20
+  limit_offset_bps: 5
+  use_bracket_orders: true
+  time_in_force: "day"
+  partial_fill_threshold: 0.8  # accept partial fills > 80%
+  order_timeout_seconds: 60
+  max_slippage_bps: 20
+  cash_buffer_pct: 0.95  # Phase 1: configurable from execution_engine
+  # Phase 3: Smart execution
+  enable_time_slicing: false
+  time_slice_size_threshold_usd: 10000
+  max_api_calls_per_minute: 200  # Rate limiting for Alpaca API
+  # Toxic time window filtering
+  enable_toxic_time_filtering: true
+  market_open_blackout_minutes: 5
+  market_close_blackout_minutes: 5
+
+
+# Phase 1: Backtesting configuration
+backtesting:
+  enable_walk_forward: true
+  train_window_days: 252  # 1 year
+  test_window_days: 63   # 3 months
+  step_days: 21          # 1 month step
+  min_trades_per_period: 10
+  position_size_pct: 0.1  # 10% of capital per position in backtest
+  # Phase 1: Cost modeling
+  transaction_costs:
+    commission_per_share: 0.0  # Alpaca has zero commission
+    spread_cost_model: "dynamic"  # dynamic, fixed
+    slippage_bps: 5
+    short_borrow_rate_annual: 0.003  # 0.3% annual rate for short positions
+  # Phase 2: Overfitting prevention
+  enable_purged_cv: false
+  embargo_pct: 0.01
+  enable_pbo: false
+  pbo_threshold: 0.5
+
+# Phase 2: ML model training configuration
+ml_training:
+  enabled: true
+  training_schedule: "daily"  # daily, weekly, manual
+  validation_method: "walk_forward"  # walk_forward, purged_cv
+  model_registry:
+    enabled: false
+    backend: "mlflow"  # mlflow, local
+    tracking_uri: "./mlruns"
+  promotion_gates:
+    min_sharpe: 1.0
+    max_drawdown_pct: 10.0
+    min_trades: 100
+    min_win_rate: 0.45
+
+# Phase 1: Scheduler configuration  
+scheduler:
+  enabled: true  # enable for automation
+  timezone: "America/New_York"
+  tasks:
+    pre_market:
+      enabled: true
+      time: "08:30"
+      actions: ["data_sync", "universe_refresh", "model_check"]
+    end_of_day:
+      enabled: true
+      time: "16:30"
+      actions: ["flatten_intraday", "generate_reports", "backup_data"]
+    nightly:
+      enabled: true
+      time: "02:00"
+      actions: ["retrain_models", "run_backtests", "cleanup"]
+
+metrics:
+  enable_prometheus: false  # set to true if using Prometheus
+  port: 9101
+  enable_health_check: true
+  health_check_port: 8080
+  # Phase 1: Enhanced metrics
+  track_latency: true
+  track_fill_quality: true
+  track_slippage: true
+
+storage:
+  db_url: "sqlite:///./data/trading.db"
+  # Environment variable support for SSD-aware storage paths
+  logs_dir: ${LOGS_DIR:./logs}
+  data_dir: ${DATA_DIR:./data}
+  backup_dir: ${BACKUP_DIR:./data/backups}
+  # Phase 1: Data lake paths with env var support
+  parquet_dir: ${DATA_DIR:./data}/parquet
+  feature_store_dir: ${FEATURE_DIR:./data/features}
+  model_dir: ${MODEL_DIR:./data/models}
+  
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  rotation: "1 day"
+  retention: "30 days"
+  format: "text"  # "json" or "text"
+  
+alerts:
+  slack_webhook: ${SLACK_WEBHOOK_URL}
+  email_enabled: false
+  alert_on_kill_switch: true
+  alert_on_errors: true
+  alert_on_daily_pnl_threshold: 5.0  # alert if daily PnL exceeds +/- 5%
+  # Phase 1: Additional alerts
+  alert_on_model_drift: false
+  alert_on_promotion_gate_failure: false
+
+session:
+  pre_market_start: "09:00"  # EST
+  market_open: "09:30"
+  market_close: "16:00"
+  post_market_end: "16:30"
+  trading_enabled_pre_market: false
+  trading_enabled_post_market: false
+
+# AI Server Integration (Local AI Runtime)
+ai_server:
+  enabled: false  # Set to true to enable AI-powered analysis
+  url: "http://127.0.0.1:8000"  # Local AI server URL
+  model: "qwen2.5:3b-instruct"  # Model to use for analysis
+  timeout: 30  # Request timeout in seconds
+  features:
+    trade_analysis: true  # Analyze trade signals
+    daily_summary: true  # Generate daily summaries
+    risk_analysis: true  # Analyze risk events
