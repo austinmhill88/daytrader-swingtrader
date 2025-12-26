@@ -190,6 +190,16 @@ ml_training:
     max_drawdown_pct: 10.0
     min_trades: 100
     min_win_rate: 0.45
+  # Advanced labeling configuration
+  labeling:
+    use_triple_barrier: true  # Use triple-barrier labeling instead of simple forward returns
+    profit_target_atr: 1.5  # Profit target as multiple of ATR
+    stop_loss_atr: 1.0  # Stop loss as multiple of ATR
+    max_holding_bars: 30  # Maximum holding period in bars
+    enable_meta_labeling: true  # Enable two-stage meta-labeling (filter + direction)
+    use_purged_cv: true  # Use purged k-fold cross-validation
+    use_sample_weighting: true  # Weight samples by uniqueness and returns
+
 
 # Phase 1: Scheduler configuration  
 scheduler:
