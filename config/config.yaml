@@ -117,6 +117,22 @@ regime:
     medium: 0.20
     high: 0.30
 
+# Phase 5: Signal quality and humility thresholds
+signal_quality:
+  enable_adaptive_thresholds: true  # Adjust thresholds based on volatility
+  vol_scaling_factor: 1.5  # How much to scale thresholds with volatility
+  require_multi_factor: true  # Require multiple factors to agree
+  min_factors_agree: 2  # Minimum number of factors that must agree
+  enable_confidence_calibration: true  # Calibrate ML model confidence
+  calibration_method: "isotonic"  # 'platt' or 'isotonic'
+  # Base thresholds (will be scaled adaptively)
+  base_thresholds:
+    zscore_entry: 2.0  # Z-score for mean reversion entry
+    zscore_exit: 0.5  # Z-score for mean reversion exit
+    adx_threshold: 20.0  # ADX for trend following
+    confidence_threshold: 0.55  # ML model confidence threshold
+
+
 risk:
   daily_max_drawdown_pct: 2.0
   per_trade_risk_pct: 0.4
@@ -185,6 +201,20 @@ execution:
   enable_toxic_time_filtering: true
   market_open_blackout_minutes: 5
   market_close_blackout_minutes: 5
+  # Phase 5: Spread-aware execution
+  spread_aware_pricing:
+    enabled: true  # Use mid-price and spread for limit pricing
+    spread_fraction: 0.25  # Place orders at mid +/- 25% of spread
+    max_spread_bps: 50  # Maximum acceptable spread (basis points)
+    spread_tighten_threshold: 0.8  # Only re-quote if spread narrows by 20%
+    max_chase_ticks: 3  # Maximum number of price improvements before giving up
+  # Liquidity quality checks
+  liquidity_checks:
+    enabled: true
+    min_adv_usd: 1000000  # $1M minimum ADV
+    max_order_size_pct_adv: 0.02  # Max 2% of ADV per order
+    check_ssr: false  # Check for short sale restrictions (requires data feed)
+    check_halts: false  # Check for trading halts (requires data feed)
 
 
 # Phase 1: Backtesting configuration
