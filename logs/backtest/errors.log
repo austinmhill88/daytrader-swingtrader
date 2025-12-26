@@ -1,0 +1,2 @@
+2025-12-25 17:16:30.676 | ERROR    | src.universe_analytics:calculate_liquidity_score:149 | Error calculating liquidity scores: 'liquidity_score'
+2025-12-25 18:00:07.910 | ERROR    | src.universe_analytics:calculate_liquidity_score:149 | Error calculating liquidity scores: 'liquidity_score'

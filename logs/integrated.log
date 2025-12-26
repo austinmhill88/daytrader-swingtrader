@@ -1,0 +1,80 @@
+2025-12-24 22:19:48.099 | INFO     | __main__:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:19:48.099 | INFO     | __main__:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:19:48.099 | INFO     | __main__:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:19:48.131 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:19:48.131 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:19:48.131 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:19:48.131 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:19:48.131 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:19:48.131 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:20:33.526 | INFO     | __main__:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:20:33.542 | INFO     | __main__:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:20:33.542 | INFO     | __main__:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:20:33.574 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:20:33.574 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:20:33.574 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:20:33.574 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:20:33.574 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:20:33.574 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:24:52.632 | INFO     | __main__:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:24:52.648 | INFO     | __main__:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:24:52.648 | INFO     | __main__:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:24:52.679 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:24:52.679 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:24:52.679 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:24:52.679 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:24:52.679 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:24:52.679 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:26:28.463 | INFO     | server.app_integrated:create_app:53 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:26:28.479 | INFO     | server.app_integrated:create_app:88 - Static UI mounted at /ui
+2025-12-24 22:26:28.479 | INFO     | server.app_integrated:create_app:90 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:39:34.541 | INFO     | server.app_integrated:create_app:54 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:39:34.541 | INFO     | server.app_integrated:create_app:94 - Static UI mounted at /ui
+2025-12-24 22:39:34.541 | INFO     | server.app_integrated:create_app:96 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-24 22:43:11.439 | INFO     | server.app_integrated:create_app:54 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-24 22:43:11.460 | INFO     | server.app_integrated:create_app:94 - Static UI mounted at /ui
+2025-12-24 22:43:11.460 | INFO     | server.app_integrated:create_app:96 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 10:54:46.074 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 10:54:46.090 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 10:54:46.090 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 10:57:18.147 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 10:57:18.154 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 10:57:18.156 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 10:59:20.301 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 10:59:20.318 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 10:59:20.318 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 11:03:21.723 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 11:03:21.737 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 11:03:21.737 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 11:06:33.039 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 11:06:33.039 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 11:06:33.039 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 11:18:07.206 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 11:18:07.220 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 11:18:07.220 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 11:21:55.765 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 11:21:55.769 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 11:21:55.769 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 12:07:03.085 | INFO     | server.app_integrated:create_app:56 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 12:07:03.085 | INFO     | server.app_integrated:create_app:100 - Static UI mounted at /ui
+2025-12-25 12:07:03.085 | INFO     | server.app_integrated:create_app:102 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 12:17:04.595 | INFO     | server.app_integrated:create_app:58 - Web search provider: google | Google key: True | Google cx: True | Bing key: False | Brave key: False | SerpAPI key: False
+2025-12-25 12:17:04.595 | INFO     | server.app_integrated:create_app:72 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 12:17:04.608 | INFO     | server.app_integrated:create_app:116 - Static UI mounted at /ui
+2025-12-25 12:17:04.608 | INFO     | server.app_integrated:create_app:118 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 17:10:47.894 | INFO     | server.app_integrated:create_app:58 - Web search provider: google | Google key: True | Google cx: True | Bing key: False | Brave key: False | SerpAPI key: False
+2025-12-25 17:10:47.894 | INFO     | server.app_integrated:create_app:72 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 17:10:47.917 | INFO     | server.app_integrated:create_app:116 - Static UI mounted at /ui
+2025-12-25 17:10:47.917 | INFO     | server.app_integrated:create_app:118 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 17:29:32.437 | INFO     | server.app_integrated:create_app:58 - Web search provider: none | Google key: False | Google cx: False | Bing key: False | Brave key: False | SerpAPI key: False
+2025-12-25 17:29:32.437 | INFO     | server.app_integrated:create_app:72 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 17:29:32.437 | INFO     | server.app_integrated:create_app:116 - Static UI mounted at /ui
+2025-12-25 17:29:32.437 | INFO     | server.app_integrated:create_app:118 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 17:45:07.754 | INFO     | server.app_integrated:create_app:58 - Web search provider: none | Google key: False | Google cx: False | Bing key: False | Brave key: False | SerpAPI key: False
+2025-12-25 17:45:07.754 | INFO     | server.app_integrated:create_app:72 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 17:45:07.770 | INFO     | server.app_integrated:create_app:117 - Static UI mounted at /ui
+2025-12-25 17:45:07.770 | INFO     | server.app_integrated:create_app:119 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml
+2025-12-25 17:51:49.494 | INFO     | server.app_integrated:create_app:58 - Web search provider: none | Google key: False | Google cx: False | Bing key: False | Brave key: False | SerpAPI key: False
+2025-12-25 17:51:49.494 | INFO     | server.app_integrated:create_app:72 - Backend: Ollama @ http://127.0.0.1:11434
+2025-12-25 17:51:49.514 | INFO     | server.app_integrated:create_app:117 - Static UI mounted at /ui (path=C:\daytrader-swingtrader-main\web)
+2025-12-25 17:51:49.514 | INFO     | server.app_integrated:create_app:119 - Integrated app ready | Backend=ollama | Default model: phi3:mini-4k-q4 | Trading config: config/config.yaml

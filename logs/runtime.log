@@ -1,0 +1,38 @@
+2025-12-25 17:16:28.713 | INFO     | src.logging_utils:setup_logging:121 | Logging initialized: level=INFO, dir=./logs, format=text
+2025-12-25 17:16:28.713 | INFO     | src.main:__init__:53 | ================================================================================
+2025-12-25 17:16:28.714 | INFO     | src.main:__init__:54 | Trading Bot Starting...
+2025-12-25 17:16:28.714 | INFO     | src.main:__init__:55 | Environment: paper
+2025-12-25 17:16:28.714 | INFO     | src.main:__init__:56 | ================================================================================
+2025-12-25 17:16:28.863 | INFO     | src.alpaca_client:_connect:63 | Connected to Alpaca API | Account: PA3SK577DNXT
+2025-12-25 17:16:28.863 | INFO     | src.alpaca_client:__init__:51 | Alpaca client initialized: https://paper-api.alpaca.markets
+2025-12-25 17:16:28.863 | INFO     | src.portfolio:__init__:32 | PortfolioState initialized
+2025-12-25 17:16:28.900 | INFO     | src.portfolio:_initialize:45 | Portfolio initialized | Starting equity: $103,047.04
+2025-12-25 17:16:28.900 | INFO     | src.execution_engine:__init__:74 | ExecutionEngine initialized | Order type: limit, Bracket orders: True, Time slicing: False, Toxic time filtering: True, Rate limit: 200 calls/min
+2025-12-25 17:16:28.900 | INFO     | src.risk_manager:__init__:60 | RiskManager initialized | Max DD: 2.0%, Per trade risk: 0.4%, Kill switch: True
+2025-12-25 17:16:28.919 | INFO     | src.notifier:__init__:70 | AlertNotifier initialized | Slack: None, Email: False
+2025-12-25 17:16:28.919 | INFO     | src.prometheus_exporter:__init__:28 | Prometheus exporter disabled
+2025-12-25 17:16:30.288 | INFO     | src.scheduler:__init__:39 | TradingScheduler initialized | Enabled: True, TZ: America/New_York
+2025-12-25 17:16:30.289 | INFO     | src.universe_analytics:__init__:52 | UniverseAnalytics initialized | Core: 200, Extended: 1000
+2025-12-25 17:16:30.290 | INFO     | src.data_feed:__init__:214 | HistoricalDataFeed initialized
+2025-12-25 17:16:30.290 | INFO     | src.feature_store:__init__:54 | FeatureStore initialized | Path: data\features
+2025-12-25 17:16:30.291 | INFO     | src.ml_trainer:__init__:129 | MLModelTrainer initialized | Enabled: True, Method: walk_forward, MLflow: False
+2025-12-25 17:16:30.291 | INFO     | src.model_registry:__init__:29 | ModelRegistry initialized | Path: data\models
+2025-12-25 18:00:06.130 | INFO     | src.logging_utils:setup_logging:121 | Logging initialized: level=INFO, dir=./logs, format=text
+2025-12-25 18:00:06.131 | INFO     | src.main:__init__:53 | ================================================================================
+2025-12-25 18:00:06.131 | INFO     | src.main:__init__:54 | Trading Bot Starting...
+2025-12-25 18:00:06.131 | INFO     | src.main:__init__:55 | Environment: paper
+2025-12-25 18:00:06.132 | INFO     | src.main:__init__:56 | ================================================================================
+2025-12-25 18:00:06.220 | INFO     | src.alpaca_client:_connect:63 | Connected to Alpaca API | Account: PA3SK577DNXT
+2025-12-25 18:00:06.220 | INFO     | src.alpaca_client:__init__:51 | Alpaca client initialized: https://paper-api.alpaca.markets
+2025-12-25 18:00:06.220 | INFO     | src.portfolio:__init__:32 | PortfolioState initialized
+2025-12-25 18:00:06.251 | INFO     | src.portfolio:_initialize:45 | Portfolio initialized | Starting equity: $103,047.04
+2025-12-25 18:00:06.251 | INFO     | src.execution_engine:__init__:74 | ExecutionEngine initialized | Order type: limit, Bracket orders: True, Time slicing: False, Toxic time filtering: True, Rate limit: 200 calls/min
+2025-12-25 18:00:06.251 | INFO     | src.risk_manager:__init__:60 | RiskManager initialized | Max DD: 2.0%, Per trade risk: 0.4%, Kill switch: True
+2025-12-25 18:00:06.267 | INFO     | src.notifier:__init__:70 | AlertNotifier initialized | Slack: None, Email: False
+2025-12-25 18:00:06.267 | INFO     | src.prometheus_exporter:__init__:28 | Prometheus exporter disabled
+2025-12-25 18:00:07.535 | INFO     | src.scheduler:__init__:39 | TradingScheduler initialized | Enabled: True, TZ: America/New_York
+2025-12-25 18:00:07.535 | INFO     | src.universe_analytics:__init__:52 | UniverseAnalytics initialized | Core: 200, Extended: 1000
+2025-12-25 18:00:07.535 | INFO     | src.data_feed:__init__:214 | HistoricalDataFeed initialized
+2025-12-25 18:00:07.536 | INFO     | src.feature_store:__init__:54 | FeatureStore initialized | Path: data\features
+2025-12-25 18:00:07.536 | INFO     | src.ml_trainer:__init__:129 | MLModelTrainer initialized | Enabled: True, Method: walk_forward, MLflow: False
+2025-12-25 18:00:07.537 | INFO     | src.model_registry:__init__:29 | ModelRegistry initialized | Path: data\models

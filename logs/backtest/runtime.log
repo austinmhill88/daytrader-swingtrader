@@ -1,0 +1,181 @@
+2025-12-25 17:16:30.295 | INFO     | src.logging_utils:setup_logging:121 | Logging initialized: level=INFO, dir=./logs/backtest, format=text
+2025-12-25 17:16:30.296 | INFO     | src.strategies.base:__init__:33 | Strategy 'intraday_mean_reversion' initialized | Enabled: True
+2025-12-25 17:16:30.296 | INFO     | src.strategies.intraday_mean_reversion:__init__:70 | intraday_mean_reversion initialized | zscore_entry=2.0, atr_stop_mult=1.5, ml_enabled=True
+2025-12-25 17:16:30.296 | INFO     | src.strategies.base:__init__:33 | Strategy 'swing_trend_following' initialized | Enabled: True
+2025-12-25 17:16:30.296 | INFO     | src.strategies.swing_trend_following:__init__:66 | swing_trend_following initialized | EMA(20/50), ADX>20, ml_enabled=True
+2025-12-25 17:16:30.296 | INFO     | backtest.walk_forward:__init__:99 | WalkForwardBacktester initialized | Train: 252d, Test: 63d, Step: 21d
+2025-12-25 17:16:30.296 | INFO     | src.ml_pipeline:__init__:76 | MLPipeline initialized | Enabled: True, Strategies with ML: 2
+2025-12-25 17:16:30.297 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: data_sync
+2025-12-25 17:16:30.297 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: universe_refresh
+2025-12-25 17:16:30.297 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: model_check
+2025-12-25 17:16:30.297 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: retrain_models
+2025-12-25 17:16:30.310 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: flatten_intraday
+2025-12-25 17:16:30.311 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: generate_reports
+2025-12-25 17:16:30.311 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: backup_data
+2025-12-25 17:16:30.311 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: run_backtests
+2025-12-25 17:16:30.312 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: cleanup
+2025-12-25 17:16:30.312 | INFO     | src.scheduler:start:121 | Scheduled pre-market tasks at 08:30
+2025-12-25 17:16:30.312 | INFO     | src.scheduler:start:142 | Scheduled end-of-day tasks at 16:30
+2025-12-25 17:16:30.313 | INFO     | src.scheduler:start:162 | Scheduled nightly tasks at 02:00
+2025-12-25 17:16:30.314 | INFO     | src.scheduler:start:166 | Scheduler started
+2025-12-25 17:16:30.314 | INFO     | src.main:__init__:104 | Scheduler started for autonomous operation
+2025-12-25 17:16:30.314 | INFO     | src.regime_detector:__init__:57 | RegimeDetector initialized | Enabled: True, Method: threshold
+2025-12-25 17:16:30.314 | INFO     | src.strategies.base:__init__:33 | Strategy 'intraday_mean_reversion' initialized | Enabled: True
+2025-12-25 17:16:30.314 | INFO     | src.strategies.intraday_mean_reversion:__init__:70 | intraday_mean_reversion initialized | zscore_entry=2.0, atr_stop_mult=1.5, ml_enabled=True
+2025-12-25 17:16:30.315 | INFO     | src.strategies.base:__init__:33 | Strategy 'swing_trend_following' initialized | Enabled: True
+2025-12-25 17:16:30.315 | INFO     | src.strategies.swing_trend_following:__init__:66 | swing_trend_following initialized | EMA(20/50), ADX>20, ml_enabled=True
+2025-12-25 17:16:30.315 | INFO     | src.main:__init__:132 | Initialized 2 strategies
+2025-12-25 17:16:30.315 | INFO     | src.universe_analytics:__init__:52 | UniverseAnalytics initialized | Core: 200, Extended: 1000
+2025-12-25 17:16:30.315 | INFO     | src.data_feed:__init__:214 | HistoricalDataFeed initialized
+2025-12-25 17:16:30.413 | WARNING  | src.data_feed:get_bars:269 | No bars returned for AAPL
+2025-12-25 17:16:30.452 | WARNING  | src.data_feed:get_bars:269 | No bars returned for MSFT
+2025-12-25 17:16:30.491 | WARNING  | src.data_feed:get_bars:269 | No bars returned for AMZN
+2025-12-25 17:16:30.524 | WARNING  | src.data_feed:get_bars:269 | No bars returned for NVDA
+2025-12-25 17:16:30.555 | WARNING  | src.data_feed:get_bars:269 | No bars returned for GOOGL
+2025-12-25 17:16:30.581 | WARNING  | src.data_feed:get_bars:269 | No bars returned for TSLA
+2025-12-25 17:16:30.621 | WARNING  | src.data_feed:get_bars:269 | No bars returned for META
+2025-12-25 17:16:30.644 | WARNING  | src.data_feed:get_bars:269 | No bars returned for SPY
+2025-12-25 17:16:30.676 | WARNING  | src.data_feed:get_bars:269 | No bars returned for QQQ
+2025-12-25 17:16:30.676 | INFO     | src.data_feed:get_multi_symbol_bars:326 | Retrieved data for 0/9 symbols
+2025-12-25 17:16:30.676 | ERROR    | src.universe_analytics:calculate_liquidity_score:149 | Error calculating liquidity scores: 'liquidity_score'
+2025-12-25 17:16:30.676 | WARNING  | src.universe_analytics:build_universe:172 | No symbols passed liquidity analysis
+2025-12-25 17:16:30.676 | WARNING  | src.main:_build_universe:191 | Universe building returned empty, using default symbols
+2025-12-25 17:16:30.676 | INFO     | src.main:_build_universe:195 | Universe Refresh | Base: 0 → Final: 0 | Earnings blackout: 0, Non-shortable: 0
+2025-12-25 17:16:30.676 | INFO     | src.main:_build_universe:205 | Top symbols: AAPL, MSFT, AMZN, NVDA, GOOGL, TSLA, META, SPY, QQQ
+2025-12-25 17:16:30.676 | INFO     | src.main:start:544 | ================================================================================
+2025-12-25 17:16:30.676 | INFO     | src.main:start:545 | STARTING TRADING BOT
+2025-12-25 17:16:30.676 | INFO     | src.main:start:546 | ================================================================================
+2025-12-25 17:16:30.676 | INFO     | src.main:_warmup_strategies:217 | Warming up strategies with historical data...
+2025-12-25 17:16:30.676 | INFO     | src.data_feed:__init__:214 | HistoricalDataFeed initialized
+2025-12-25 17:16:30.676 | INFO     | src.data_feed:get_warmup_data:349 | Fetching 60 days of warmup data for 9 symbols
+2025-12-25 17:16:32.101 | INFO     | src.data_feed:get_bars:291 | Retrieved 16058 bars for AAPL (1Min)
+2025-12-25 17:16:33.364 | INFO     | src.data_feed:get_bars:291 | Retrieved 15982 bars for MSFT (1Min)
+2025-12-25 17:16:34.659 | INFO     | src.data_feed:get_bars:291 | Retrieved 16089 bars for AMZN (1Min)
+2025-12-25 17:16:35.980 | INFO     | src.data_feed:get_bars:291 | Retrieved 16576 bars for NVDA (1Min)
+2025-12-25 17:16:37.284 | INFO     | src.data_feed:get_bars:291 | Retrieved 16131 bars for GOOGL (1Min)
+2025-12-25 17:16:38.584 | INFO     | src.data_feed:get_bars:291 | Retrieved 16395 bars for TSLA (1Min)
+2025-12-25 17:16:39.806 | INFO     | src.data_feed:get_bars:291 | Retrieved 15794 bars for META (1Min)
+2025-12-25 17:16:41.124 | INFO     | src.data_feed:get_bars:291 | Retrieved 16901 bars for SPY (1Min)
+2025-12-25 17:16:42.470 | INFO     | src.data_feed:get_bars:291 | Retrieved 17314 bars for QQQ (1Min)
+2025-12-25 17:16:42.475 | INFO     | src.data_feed:get_multi_symbol_bars:326 | Retrieved data for 9/9 symbols
+2025-12-25 17:16:42.475 | INFO     | src.strategies.intraday_mean_reversion:warmup:84 | intraday_mean_reversion: Warming up with data for 9 symbols
+2025-12-25 17:16:42.475 | INFO     | src.model_registry:__init__:29 | ModelRegistry initialized | Path: data\models
+2025-12-25 17:16:42.475 | INFO     | src.feature_store:__init__:54 | FeatureStore initialized | Path: data\features
+2025-12-25 17:16:42.475 | INFO     | src.strategies.intraday_mean_reversion:warmup:113 | intraday_mean_reversion: No promoted ML model found, using rule-based only
+2025-12-25 17:16:42.511 | INFO     | src.strategies.intraday_mean_reversion:warmup:133 | intraday_mean_reversion: Warmup complete for 9 symbols
+2025-12-25 17:16:42.511 | INFO     | src.main:_warmup_strategies:232 | Strategy intraday_mean_reversion warmed up successfully
+2025-12-25 17:16:42.511 | INFO     | src.strategies.swing_trend_following:warmup:80 | swing_trend_following: Warming up with data for 9 symbols
+2025-12-25 17:16:42.511 | INFO     | src.model_registry:__init__:29 | ModelRegistry initialized | Path: data\models
+2025-12-25 17:16:42.511 | INFO     | src.feature_store:__init__:54 | FeatureStore initialized | Path: data\features
+2025-12-25 17:16:42.511 | INFO     | src.strategies.swing_trend_following:warmup:109 | swing_trend_following: No promoted ML model found, using rule-based only
+2025-12-25 17:16:42.571 | INFO     | src.strategies.swing_trend_following:warmup:129 | swing_trend_following: Warmup complete for 9 symbols
+2025-12-25 17:16:42.571 | INFO     | src.main:_warmup_strategies:232 | Strategy swing_trend_following warmed up successfully
+2025-12-25 17:16:42.571 | INFO     | src.main:_warmup_strategies:236 | Strategy warmup complete
+2025-12-25 17:16:42.809 | INFO     | src.portfolio:log_summary:392 | Portfolio Summary | Equity: $103,047.04 | Cash: $103,047.04 | Positions: 0 | Daily P&L: $0.00 (+0.00%) | Exposure: 0.0% | Drawdown: 0.00%
+2025-12-25 17:16:42.907 | INFO     | src.risk_manager:log_risk_summary:371 | Risk Summary | Kill switch: False | DD: 0.00% / 2.00% | Exposure: 0.0% | Positions: 0/30 | Trades: 0/100 | Losses: 0/3
+2025-12-25 17:16:42.907 | INFO     | src.main:_run_trading_loop:360 | Starting trading loop (polling mode)
+2025-12-25 17:27:38.784 | INFO     | src.main:stop:561 | ================================================================================
+2025-12-25 17:27:38.784 | INFO     | src.main:stop:562 | STOPPING TRADING BOT
+2025-12-25 17:27:38.785 | INFO     | src.main:stop:563 | ================================================================================
+2025-12-25 17:27:38.785 | INFO     | src.main:stop:568 | Cancelling all open orders...
+2025-12-25 17:27:38.816 | INFO     | src.alpaca_client:cancel_all_orders:265 | All orders cancelled
+2025-12-25 17:27:38.816 | INFO     | src.execution_engine:cancel_all_orders:788 | All orders cancelled | Reason: Shutdown
+2025-12-25 17:27:39.059 | INFO     | src.portfolio:log_summary:392 | Portfolio Summary | Equity: $103,047.04 | Cash: $103,047.04 | Positions: 0 | Daily P&L: $0.00 (+0.00%) | Exposure: 0.0% | Drawdown: 0.00%
+2025-12-25 17:27:39.059 | INFO     | src.main:stop:574 | Trading bot stopped successfully
+2025-12-25 17:27:39.059 | INFO     | src.main:stop:575 | ================================================================================
+2025-12-25 17:27:43.253 | WARNING  | src.main:_signal_handler:144 | Received signal 2 - initiating graceful shutdown...
+2025-12-25 17:27:43.253 | INFO     | src.main:stop:561 | ================================================================================
+2025-12-25 17:27:43.254 | INFO     | src.main:stop:562 | STOPPING TRADING BOT
+2025-12-25 17:27:43.254 | INFO     | src.main:stop:563 | ================================================================================
+2025-12-25 17:27:43.254 | INFO     | src.main:stop:568 | Cancelling all open orders...
+2025-12-25 17:27:43.283 | INFO     | src.alpaca_client:cancel_all_orders:265 | All orders cancelled
+2025-12-25 17:27:43.283 | INFO     | src.execution_engine:cancel_all_orders:788 | All orders cancelled | Reason: Shutdown
+2025-12-25 17:27:43.523 | INFO     | src.portfolio:log_summary:392 | Portfolio Summary | Equity: $103,047.04 | Cash: $103,047.04 | Positions: 0 | Daily P&L: $0.00 (+0.00%) | Exposure: 0.0% | Drawdown: 0.00%
+2025-12-25 17:27:43.523 | INFO     | src.main:stop:574 | Trading bot stopped successfully
+2025-12-25 17:27:43.523 | INFO     | src.main:stop:575 | ================================================================================
+2025-12-25 17:27:44.541 | WARNING  | src.main:_signal_handler:144 | Received signal 2 - initiating graceful shutdown...
+2025-12-25 17:27:44.541 | INFO     | src.main:stop:561 | ================================================================================
+2025-12-25 17:27:44.541 | INFO     | src.main:stop:562 | STOPPING TRADING BOT
+2025-12-25 17:27:44.541 | INFO     | src.main:stop:563 | ================================================================================
+2025-12-25 17:27:44.541 | INFO     | src.main:stop:568 | Cancelling all open orders...
+2025-12-25 17:27:44.557 | INFO     | src.alpaca_client:cancel_all_orders:265 | All orders cancelled
+2025-12-25 17:27:44.557 | INFO     | src.execution_engine:cancel_all_orders:788 | All orders cancelled | Reason: Shutdown
+2025-12-25 17:27:44.813 | INFO     | src.portfolio:log_summary:392 | Portfolio Summary | Equity: $103,047.04 | Cash: $103,047.04 | Positions: 0 | Daily P&L: $0.00 (+0.00%) | Exposure: 0.0% | Drawdown: 0.00%
+2025-12-25 17:27:44.813 | INFO     | src.main:stop:574 | Trading bot stopped successfully
+2025-12-25 17:27:44.813 | INFO     | src.main:stop:575 | ================================================================================
+2025-12-25 18:00:07.541 | INFO     | src.logging_utils:setup_logging:121 | Logging initialized: level=INFO, dir=./logs/backtest, format=text
+2025-12-25 18:00:07.542 | INFO     | src.strategies.base:__init__:33 | Strategy 'intraday_mean_reversion' initialized | Enabled: True
+2025-12-25 18:00:07.542 | INFO     | src.strategies.intraday_mean_reversion:__init__:70 | intraday_mean_reversion initialized | zscore_entry=2.0, atr_stop_mult=1.5, ml_enabled=True
+2025-12-25 18:00:07.542 | INFO     | src.strategies.base:__init__:33 | Strategy 'swing_trend_following' initialized | Enabled: True
+2025-12-25 18:00:07.542 | INFO     | src.strategies.swing_trend_following:__init__:66 | swing_trend_following initialized | EMA(20/50), ADX>20, ml_enabled=True
+2025-12-25 18:00:07.542 | INFO     | backtest.walk_forward:__init__:99 | WalkForwardBacktester initialized | Train: 252d, Test: 63d, Step: 21d
+2025-12-25 18:00:07.543 | INFO     | src.ml_pipeline:__init__:76 | MLPipeline initialized | Enabled: True, Strategies with ML: 2
+2025-12-25 18:00:07.543 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: data_sync
+2025-12-25 18:00:07.543 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: universe_refresh
+2025-12-25 18:00:07.543 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: model_check
+2025-12-25 18:00:07.543 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: retrain_models
+2025-12-25 18:00:07.543 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: flatten_intraday
+2025-12-25 18:00:07.544 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: generate_reports
+2025-12-25 18:00:07.544 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: backup_data
+2025-12-25 18:00:07.544 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: run_backtests
+2025-12-25 18:00:07.544 | INFO     | src.scheduler:register_handler:50 | Registered handler for action: cleanup
+2025-12-25 18:00:07.544 | INFO     | src.scheduler:start:121 | Scheduled pre-market tasks at 08:30
+2025-12-25 18:00:07.545 | INFO     | src.scheduler:start:142 | Scheduled end-of-day tasks at 16:30
+2025-12-25 18:00:07.545 | INFO     | src.scheduler:start:162 | Scheduled nightly tasks at 02:00
+2025-12-25 18:00:07.547 | INFO     | src.scheduler:start:166 | Scheduler started
+2025-12-25 18:00:07.547 | INFO     | src.main:__init__:104 | Scheduler started for autonomous operation
+2025-12-25 18:00:07.547 | INFO     | src.regime_detector:__init__:57 | RegimeDetector initialized | Enabled: True, Method: threshold
+2025-12-25 18:00:07.548 | INFO     | src.strategies.base:__init__:33 | Strategy 'intraday_mean_reversion' initialized | Enabled: True
+2025-12-25 18:00:07.548 | INFO     | src.strategies.intraday_mean_reversion:__init__:70 | intraday_mean_reversion initialized | zscore_entry=2.0, atr_stop_mult=1.5, ml_enabled=True
+2025-12-25 18:00:07.548 | INFO     | src.strategies.base:__init__:33 | Strategy 'swing_trend_following' initialized | Enabled: True
+2025-12-25 18:00:07.548 | INFO     | src.strategies.swing_trend_following:__init__:66 | swing_trend_following initialized | EMA(20/50), ADX>20, ml_enabled=True
+2025-12-25 18:00:07.549 | INFO     | src.main:__init__:132 | Initialized 2 strategies
+2025-12-25 18:00:07.549 | INFO     | src.universe_analytics:__init__:52 | UniverseAnalytics initialized | Core: 200, Extended: 1000
+2025-12-25 18:00:07.549 | INFO     | src.data_feed:__init__:214 | HistoricalDataFeed initialized
+2025-12-25 18:00:07.656 | WARNING  | src.data_feed:get_bars:269 | No bars returned for AAPL
+2025-12-25 18:00:07.687 | WARNING  | src.data_feed:get_bars:269 | No bars returned for MSFT
+2025-12-25 18:00:07.720 | WARNING  | src.data_feed:get_bars:269 | No bars returned for AMZN
+2025-12-25 18:00:07.756 | WARNING  | src.data_feed:get_bars:269 | No bars returned for NVDA
+2025-12-25 18:00:07.786 | WARNING  | src.data_feed:get_bars:269 | No bars returned for GOOGL
+2025-12-25 18:00:07.818 | WARNING  | src.data_feed:get_bars:269 | No bars returned for TSLA
+2025-12-25 18:00:07.847 | WARNING  | src.data_feed:get_bars:269 | No bars returned for META
+2025-12-25 18:00:07.877 | WARNING  | src.data_feed:get_bars:269 | No bars returned for SPY
+2025-12-25 18:00:07.909 | WARNING  | src.data_feed:get_bars:269 | No bars returned for QQQ
+2025-12-25 18:00:07.910 | INFO     | src.data_feed:get_multi_symbol_bars:326 | Retrieved data for 0/9 symbols
+2025-12-25 18:00:07.910 | ERROR    | src.universe_analytics:calculate_liquidity_score:149 | Error calculating liquidity scores: 'liquidity_score'
+2025-12-25 18:00:07.912 | WARNING  | src.universe_analytics:build_universe:172 | No symbols passed liquidity analysis
+2025-12-25 18:00:07.912 | WARNING  | src.main:_build_universe:191 | Universe building returned empty, using default symbols
+2025-12-25 18:00:07.912 | INFO     | src.main:_build_universe:195 | Universe Refresh | Base: 0 → Final: 0 | Earnings blackout: 0, Non-shortable: 0
+2025-12-25 18:00:07.912 | INFO     | src.main:_build_universe:205 | Top symbols: AAPL, MSFT, AMZN, NVDA, GOOGL, TSLA, META, SPY, QQQ
+2025-12-25 18:00:07.913 | INFO     | src.main:start:544 | ================================================================================
+2025-12-25 18:00:07.913 | INFO     | src.main:start:545 | STARTING TRADING BOT
+2025-12-25 18:00:07.913 | INFO     | src.main:start:546 | ================================================================================
+2025-12-25 18:00:07.914 | INFO     | src.main:_warmup_strategies:217 | Warming up strategies with historical data...
+2025-12-25 18:00:07.914 | INFO     | src.data_feed:__init__:214 | HistoricalDataFeed initialized
+2025-12-25 18:00:07.914 | INFO     | src.data_feed:get_warmup_data:349 | Fetching 60 days of warmup data for 9 symbols
+2025-12-25 18:00:09.455 | INFO     | src.data_feed:get_bars:291 | Retrieved 16058 bars for AAPL (1Min)
+2025-12-25 18:00:10.887 | INFO     | src.data_feed:get_bars:291 | Retrieved 15982 bars for MSFT (1Min)
+2025-12-25 18:00:12.210 | INFO     | src.data_feed:get_bars:291 | Retrieved 16089 bars for AMZN (1Min)
+2025-12-25 18:00:13.625 | INFO     | src.data_feed:get_bars:291 | Retrieved 16576 bars for NVDA (1Min)
+2025-12-25 18:00:15.001 | INFO     | src.data_feed:get_bars:291 | Retrieved 16131 bars for GOOGL (1Min)
+2025-12-25 18:00:16.377 | INFO     | src.data_feed:get_bars:291 | Retrieved 16395 bars for TSLA (1Min)
+2025-12-25 18:00:17.658 | INFO     | src.data_feed:get_bars:291 | Retrieved 15794 bars for META (1Min)
+2025-12-25 18:00:19.081 | INFO     | src.data_feed:get_bars:291 | Retrieved 16901 bars for SPY (1Min)
+2025-12-25 18:00:20.511 | INFO     | src.data_feed:get_bars:291 | Retrieved 17314 bars for QQQ (1Min)
+2025-12-25 18:00:20.513 | INFO     | src.data_feed:get_multi_symbol_bars:326 | Retrieved data for 9/9 symbols
+2025-12-25 18:00:20.513 | INFO     | src.strategies.intraday_mean_reversion:warmup:84 | intraday_mean_reversion: Warming up with data for 9 symbols
+2025-12-25 18:00:20.513 | INFO     | src.model_registry:__init__:29 | ModelRegistry initialized | Path: data\models
+2025-12-25 18:00:20.513 | INFO     | src.feature_store:__init__:54 | FeatureStore initialized | Path: data\features
+2025-12-25 18:00:20.513 | INFO     | src.strategies.intraday_mean_reversion:warmup:113 | intraday_mean_reversion: No promoted ML model found, using rule-based only
+2025-12-25 18:00:20.560 | INFO     | src.strategies.intraday_mean_reversion:warmup:133 | intraday_mean_reversion: Warmup complete for 9 symbols
+2025-12-25 18:00:20.560 | INFO     | src.main:_warmup_strategies:232 | Strategy intraday_mean_reversion warmed up successfully
+2025-12-25 18:00:20.561 | INFO     | src.strategies.swing_trend_following:warmup:80 | swing_trend_following: Warming up with data for 9 symbols
+2025-12-25 18:00:20.561 | INFO     | src.model_registry:__init__:29 | ModelRegistry initialized | Path: data\models
+2025-12-25 18:00:20.561 | INFO     | src.feature_store:__init__:54 | FeatureStore initialized | Path: data\features
+2025-12-25 18:00:20.561 | INFO     | src.strategies.swing_trend_following:warmup:109 | swing_trend_following: No promoted ML model found, using rule-based only
+2025-12-25 18:00:20.624 | INFO     | src.strategies.swing_trend_following:warmup:129 | swing_trend_following: Warmup complete for 9 symbols
+2025-12-25 18:00:20.624 | INFO     | src.main:_warmup_strategies:232 | Strategy swing_trend_following warmed up successfully
+2025-12-25 18:00:20.624 | INFO     | src.main:_warmup_strategies:236 | Strategy warmup complete
+2025-12-25 18:00:20.854 | INFO     | src.portfolio:log_summary:392 | Portfolio Summary | Equity: $103,047.04 | Cash: $103,047.04 | Positions: 0 | Daily P&L: $0.00 (+0.00%) | Exposure: 0.0% | Drawdown: 0.00%
+2025-12-25 18:00:20.939 | INFO     | src.risk_manager:log_risk_summary:371 | Risk Summary | Kill switch: False | DD: 0.00% / 2.00% | Exposure: 0.0% | Positions: 0/30 | Trades: 0/100 | Losses: 0/3
+2025-12-25 18:00:20.939 | INFO     | src.main:_run_trading_loop:360 | Starting trading loop (polling mode)
