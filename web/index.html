@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Prometheus</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Cache-busting version tags -->
+  <link href="/ui/styles.css?v=20251225" rel="stylesheet">
+  <link href="/ui/brand.css?v=20251225" rel="stylesheet">
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-logo" aria-label="Prometheus logo">Π</div>
+      <div>
+        <h1>Prometheus</h1>
+        <p class="subtitle">Foresight Trading Automation • Paper mode • GPU AI available</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="startBtn" class="btn primary">Start</button>
+      <button id="stopBtn" class="btn danger">Stop</button>
+      <span id="statusBadge" class="badge">Status: Unknown</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Portfolio KPIs</h2>
+      <div class="grid grid-4">
+        <div class="stat"><div class="stat-label">Equity</div><div class="stat-value" id="equityValue">—</div><div class="stat-sub" id="cashValue">Cash: —</div></div>
+        <div class="stat"><div class="stat-label">P&L</div><div class="stat-value" id="pnlValue">—</div><div class="stat-sub" id="pnlSplit">Realized / Unrealized</div></div>
+        <div class="stat"><div class="stat-label">Risk</div><div class="stat-value" id="drawdownValue">DD: —</div><div class="stat-sub" id="exposureValue">Exposure: —</div></div>
+        <div class="stat"><div class="stat-label">Ops</div><div class="stat-value" id="regimeValue">Regime: —</div><div class="stat-sub" id="opsCounts">Pos / Orders: —</div></div>
+      </div>
+      <div class="caps"><span id="capsText">Caps: —</span></div>
+    </section>
+
+    <section class="card wide">
+      <div class="section-header">
+        <h2>Live Prices</h2>
+        <div class="actions">
+          <input id="watchlist" type="text" value="AAPL,MSFT,AMZN,NVDA,GOOGL,TSLA,META,SPY,QQQ" />
+          <button id="refreshTickers" class="btn">Refresh</button>
+        </div>
+      </div>
+      <div id="tickersGrid" class="tickers"></div>
+    </section>
+
+    <section class="card wide">
+      <div class="section-header">
+        <h2>Positions</h2>
+        <div class="actions">
+          <button id="refreshPositions" class="btn">Refresh</button>
+        </div>
+      </div>
+      <table class="table" id="positionsTable">
+        <thead>
+          <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Mark</th><th>PnL $</th><th>PnL %</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card wide">
+      <div class="section-header">
+        <h2>AI Assistant</h2>
+        <div class="actions">
+          <label class="inline">Reply length <input type="range" id="aiLen" min="128" max="384" step="32" value="256" /></label>
+          <label class="inline"><input type="checkbox" id="aiUseLogs" /> Use recent logs as context</label>
+          <label class="inline"><input type="checkbox" id="aiUseWeb" /> Use web search for this turn</label>
+          <button id="resetChat" class="btn">Reset Chat</button>
+          <span class="hint">Tip: type "/web your question" to force a web search once</span>
+        </div>
+      </div>
+      <div class="chat">
+        <div id="chatOutput" class="chat-output" aria-live="polite">Session started. How can I help?</div>
+        <div class="chat-input">
+          <input id="chatInput" type="text" placeholder='Ask anything. Prefix with "/web " to search the web.' />
+          <button id="sendChat" class="btn primary">Send</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer"><span>Prometheus • Alpaca paper • Universe analytics • GPU AI + optional web search</span></footer>
+  <script src="/ui/app.js?v=20251225"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+/* Prometheus branding: colors, logo, and subtle accents */
+:root{
+  --brand-bg: #0b1c2d;
+  --brand-accent: #ff6f00;
+  --brand-text: #e6edf3;
+}
+.app-header{
+  background: linear-gradient(90deg, var(--brand-bg) 0%, #10273b 60%, #133049 100%);
+  color: var(--brand-text);
+}
+.brand{
+  display:flex; align-items:center;
+}
+.brand .brand-logo{
+  width: 44px; height: 44px; border-radius: 10px;
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 24px;
+  color: #fff;
+  background: radial-gradient(120% 120% at 20% 20%, var(--brand-accent) 0%, #e65100 60%, #7a3b00 100%);
+  box-shadow: 0 4px 14px rgba(255, 111, 0, 0.35);
+  margin-right: 12px;
+}
+.brand h1{ margin: 0; font-size: 22px; color: var(--brand-text); }
+.brand .subtitle{ margin: 2px 0 0; color: #b7c4d6; font-size: 12px; }
+.btn.primary{ background: var(--brand-accent); border-color: #d85f00; }
+.btn.primary:hover{ background: #ff8100; }
+.app-footer{
+  border-top: 1px solid #13263a;
+  color: #93a4b7;
+}
