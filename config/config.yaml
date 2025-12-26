@@ -117,6 +117,22 @@ regime:
     medium: 0.20
     high: 0.30
 
+# Phase 5: Signal quality and humility thresholds
+signal_quality:
+  enable_adaptive_thresholds: true  # Adjust thresholds based on volatility
+  vol_scaling_factor: 1.5  # How much to scale thresholds with volatility
+  require_multi_factor: true  # Require multiple factors to agree
+  min_factors_agree: 2  # Minimum number of factors that must agree
+  enable_confidence_calibration: true  # Calibrate ML model confidence
+  calibration_method: "isotonic"  # 'platt' or 'isotonic'
+  # Base thresholds (will be scaled adaptively)
+  base_thresholds:
+    zscore_entry: 2.0  # Z-score for mean reversion entry
+    zscore_exit: 0.5  # Z-score for mean reversion exit
+    adx_threshold: 20.0  # ADX for trend following
+    confidence_threshold: 0.55  # ML model confidence threshold
+
+
 risk:
   daily_max_drawdown_pct: 2.0
   per_trade_risk_pct: 0.4
@@ -135,6 +151,37 @@ risk:
   # Phase 1: Enhanced risk metrics
   enable_weekly_kill_switch: false
   weekly_max_drawdown_pct: 7.0
+  # Phase 5: Dynamic sizing and volatility targeting
+  dynamic_sizing:
+    enable_vol_targeting: true  # Enable portfolio volatility targeting
+    target_portfolio_volatility: 0.10  # Target 10% annualized portfolio volatility
+    vol_ewma_span: 20  # EWMA span for volatility calculation
+    vol_lookback_days: 60  # Lookback period for realized volatility
+    enable_adv_constraints: true  # Enforce ADV-based participation limits
+    max_participation_rate_intraday: 0.01  # Max 1% of ADV for intraday
+    max_participation_rate_swing: 0.02  # Max 2% of ADV for swing trades
+  # Phase 5: Per-strategy risk budgets
+  strategy_risk_budgets:
+    swing_trend_following: 0.60  # 60% of total risk budget
+    intraday_mean_reversion: 0.40  # 40% of total risk budget
+    # Adjust weights dynamically based on regime
+    regime_adjustments:
+      enable: true
+      trending_up:
+        swing_trend_following: 0.70
+        intraday_mean_reversion: 0.30
+      trending_down:
+        swing_trend_following: 0.50
+        intraday_mean_reversion: 0.50
+      ranging:
+        swing_trend_following: 0.40
+        intraday_mean_reversion: 0.60
+      high_volatility:
+        swing_trend_following: 0.50
+        intraday_mean_reversion: 0.50
+      crisis:
+        swing_trend_following: 0.30
+        intraday_mean_reversion: 0.30  # Reduce both in crisis
   
 execution:
   default_order_type: "limit"
@@ -154,6 +201,20 @@ execution:
   enable_toxic_time_filtering: true
   market_open_blackout_minutes: 5
   market_close_blackout_minutes: 5
+  # Phase 5: Spread-aware execution
+  spread_aware_pricing:
+    enabled: true  # Use mid-price and spread for limit pricing
+    spread_fraction: 0.25  # Place orders at mid +/- 25% of spread
+    max_spread_bps: 50  # Maximum acceptable spread (basis points)
+    spread_tighten_threshold: 0.8  # Only re-quote if spread narrows by 20%
+    max_chase_ticks: 3  # Maximum number of price improvements before giving up
+  # Liquidity quality checks
+  liquidity_checks:
+    enabled: true
+    min_adv_usd: 1000000  # $1M minimum ADV
+    max_order_size_pct_adv: 0.02  # Max 2% of ADV per order
+    check_ssr: false  # Check for short sale restrictions (requires data feed)
+    check_halts: false  # Check for trading halts (requires data feed)
 
 
 # Phase 1: Backtesting configuration
@@ -190,6 +251,16 @@ ml_training:
     max_drawdown_pct: 10.0
     min_trades: 100
     min_win_rate: 0.45
+  # Advanced labeling configuration
+  labeling:
+    use_triple_barrier: true  # Use triple-barrier labeling instead of simple forward returns
+    profit_target_atr: 1.5  # Profit target as multiple of ATR
+    stop_loss_atr: 1.0  # Stop loss as multiple of ATR
+    max_holding_bars: 30  # Maximum holding period in bars
+    enable_meta_labeling: true  # Enable two-stage meta-labeling (filter + direction)
+    use_purged_cv: true  # Use purged k-fold cross-validation
+    use_sample_weighting: true  # Weight samples by uniqueness and returns
+
 
 # Phase 1: Scheduler configuration  
 scheduler:

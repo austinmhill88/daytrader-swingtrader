@@ -1,6 +1,6 @@
 """
 Capital allocation across strategies (Phase 4).
-Implements Kelly criterion and volatility targeting for portfolio optimization.
+Implements Kelly criterion, volatility targeting, and regime-based risk budgets.
 """
 import pandas as pd
 import numpy as np
@@ -10,8 +10,8 @@ from loguru import logger
 
 class CapitalAllocator:
     """
-    Capital allocation manager for multiple strategies.
-    Phase 4 implementation for portfolio orchestration.
+    Capital allocation manager for multiple strategies with risk budgets.
+    Implements per-strategy risk budgets with regime-based adjustments.
     """
     
     def __init__(self, config: Dict):
@@ -35,8 +35,29 @@ class CapitalAllocator:
                     'type': 'intraday' if 'intraday' in strategy_name else 'swing'
                 }
         
+        # Risk budget configuration
+        risk_config = config.get('risk', {})
+        budget_config = risk_config.get('strategy_risk_budgets', {})
+        
+        # Base risk budgets per strategy
+        self.base_risk_budgets = {}
+        for strategy_name in self.strategies.keys():
+            self.base_risk_budgets[strategy_name] = budget_config.get(strategy_name, 1.0 / len(self.strategies))
+        
+        # Normalize budgets to sum to 1.0
+        total_budget = sum(self.base_risk_budgets.values())
+        if total_budget > 0:
+            self.base_risk_budgets = {k: v / total_budget for k, v in self.base_risk_budgets.items()}
+        
+        # Regime-based adjustments
+        self.regime_adjustments_enabled = budget_config.get('regime_adjustments', {}).get('enable', True)
+        self.regime_adjustments = budget_config.get('regime_adjustments', {})
+        
+        # Current regime-adjusted budgets
+        self.current_risk_budgets = self.base_risk_budgets.copy()
+        
         # Allocation method
-        self.allocation_method = 'equal_weight'  # 'equal_weight', 'risk_parity', 'kelly', 'vol_target'
+        self.allocation_method = 'risk_budget'  # 'equal_weight', 'risk_parity', 'kelly', 'vol_target', 'risk_budget'
         
         # Volatility targeting
         self.target_portfolio_vol = 0.15  # 15% annualized
@@ -54,29 +75,81 @@ class CapitalAllocator:
         logger.info(
             f"CapitalAllocator initialized | "
             f"Strategies: {len(self.strategies)}, "
-            f"Method: {self.allocation_method}"
+            f"Method: {self.allocation_method}, "
+            f"Risk budgets: {self.base_risk_budgets}"
         )
+    
+    def update_risk_budgets_for_regime(self, regime: str) -> None:
+        """
+        Update strategy risk budgets based on current market regime.
+        
+        Args:
+            regime: Current market regime (e.g., 'trending_up', 'crisis')
+        """
+        if not self.regime_adjustments_enabled:
+            return
+        
+        # Get regime-specific adjustments
+        regime_budgets = self.regime_adjustments.get(regime, {})
+        
+        if not regime_budgets:
+            # No specific adjustments for this regime, use base budgets
+            self.current_risk_budgets = self.base_risk_budgets.copy()
+            return
+        
+        # Apply regime adjustments
+        updated_budgets = {}
+        for strategy_name in self.strategies.keys():
+            if strategy_name in regime_budgets:
+                updated_budgets[strategy_name] = regime_budgets[strategy_name]
+            else:
+                updated_budgets[strategy_name] = self.base_risk_budgets[strategy_name]
+        
+        # Normalize to sum to 1.0
+        total_budget = sum(updated_budgets.values())
+        if total_budget > 0:
+            self.current_risk_budgets = {k: v / total_budget for k, v in updated_budgets.items()}
+        
+        logger.info(
+            f"Risk budgets updated for regime '{regime}': {self.current_risk_budgets}"
+        )
+    
+    def get_strategy_risk_budget(self, strategy_name: str) -> float:
+        """
+        Get current risk budget allocation for a strategy.
+        
+        Args:
+            strategy_name: Name of strategy
+            
+        Returns:
+            Risk budget as fraction (0.0 to 1.0)
+        """
+        return self.current_risk_budgets.get(strategy_name, 0.0)
     
     def allocate_capital(
         self,
         total_equity: float,
-        strategy_metrics: Dict[str, Dict]
+        strategy_metrics: Optional[Dict[str, Dict]] = None
     ) -> Dict[str, float]:
         """
-        Allocate capital across strategies.
+        Allocate capital across strategies based on risk budgets.
         
         Args:
             total_equity: Total account equity
-            strategy_metrics: Dict of strategy -> performance metrics
+            strategy_metrics: Dict of strategy -> performance metrics (optional)
             
         Returns:
             Dict of strategy -> allocated capital
         """
-        if self.allocation_method == 'equal_weight':
+        if self.allocation_method == 'risk_budget':
+            return self._risk_budget_allocation(total_equity)
+        
+        elif self.allocation_method == 'equal_weight':
             return self._equal_weight_allocation(total_equity)
         
         elif self.allocation_method == 'risk_parity':
-            return self._risk_parity_allocation(total_equity, strategy_metrics)
+            return self._risk_parity_allocation(total_equity, strategy_metrics or {})
+
         
         elif self.allocation_method == 'kelly':
             return self._kelly_allocation(total_equity, strategy_metrics)
@@ -87,6 +160,38 @@ class CapitalAllocator:
         else:
             logger.warning(f"Unknown allocation method: {self.allocation_method}")
             return self._equal_weight_allocation(total_equity)
+    
+    def _risk_budget_allocation(self, total_equity: float) -> Dict[str, float]:
+        """
+        Allocate capital based on risk budgets.
+        Each strategy gets a fraction of total capital proportional to its risk budget.
+        
+        Args:
+            total_equity: Total equity
+            
+        Returns:
+            Dict of strategy -> allocation
+        """
+        allocations = {}
+        
+        for strategy_name, strategy_config in self.strategies.items():
+            # Get risk budget for this strategy
+            risk_budget = self.get_strategy_risk_budget(strategy_name)
+            
+            # Apply strategy type limits
+            strategy_type = strategy_config['type']
+            max_alloc_pct = self.max_allocation_pct[strategy_type] / 100.0
+            
+            # Calculate allocation (risk budget * total equity, capped by type limit)
+            allocation_pct = min(risk_budget, max_alloc_pct)
+            allocations[strategy_name] = total_equity * allocation_pct
+        
+        logger.debug(
+            f"Risk budget allocation: "
+            f"{', '.join([f'{k}: ${v:,.0f} ({self.get_strategy_risk_budget(k):.1%})' for k, v in allocations.items()])}"
+        )
+        
+        return allocations
     
     def _equal_weight_allocation(self, total_equity: float) -> Dict[str, float]:
         """

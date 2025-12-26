@@ -13,6 +13,7 @@ import traceback
 from src.feature_store import FeatureStore
 from src.ml_trainer import MLModelTrainer
 from src.model_registry import ModelRegistry
+from src.labeling import TripleBarrierLabeler, PurgedKFold, SampleWeights
 from backtest.walk_forward import WalkForwardValidator
 
 
@@ -38,6 +39,7 @@ class MLPipeline:
         self.feature_store = FeatureStore(config)
         self.ml_trainer = MLModelTrainer(config)
         self.registry = ModelRegistry(config['storage']['model_dir'])
+        self.labeler = TripleBarrierLabeler(config)
         
         # Configuration
         self.enabled = ml_config.get('enabled', False)
@@ -144,7 +146,7 @@ class MLPipeline:
             
             # Step 2: Create training labels
             logger.info("Step 2: Creating labels...")
-            X_train, y_train = self._create_labels(
+            X_train, y_train, sample_weights = self._create_labels(
                 feature_dfs,
                 strategy_name,
                 start_date,
@@ -163,10 +165,27 @@ class MLPipeline:
             
             # Step 3: Train model with cross-validation
             logger.info("Step 3: Training model...")
+            
+            # Check if purged CV is enabled
+            use_purged_cv = self.config.get('ml_training', {}).get('labeling', {}).get('use_purged_cv', True)
+            
+            if use_purged_cv:
+                # Use purged k-fold for cross-validation
+                cv_splitter = PurgedKFold(
+                    n_splits=5,
+                    embargo_pct=self.config.get('backtesting', {}).get('embargo_pct', 0.01),
+                    purge_window=5
+                )
+                logger.info("Using Purged K-Fold cross-validation")
+            else:
+                cv_splitter = None
+                logger.info("Using standard time-series cross-validation")
+            
             model = self.ml_trainer.train_model(
                 X_train,
                 y_train,
-                model_type=model_type
+                model_type=model_type,
+                sample_weight=sample_weights
             )
             
             # Step 4: Cross-validation
@@ -175,7 +194,9 @@ class MLPipeline:
                 X_train,
                 y_train,
                 model_type=model_type,
-                n_splits=5
+                n_splits=5,
+                sample_weight=sample_weights,
+                cv=cv_splitter
             )
             
             # Step 5: Walk-forward validation (if enabled)
@@ -271,9 +292,9 @@ class MLPipeline:
         strategy_name: str,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
-    ) -> Tuple[Optional[pd.DataFrame], Optional[pd.Series]]:
+    ) -> Tuple[Optional[pd.DataFrame], Optional[pd.Series], Optional[pd.Series]]:
         """
-        Create training labels based on strategy logic.
+        Create training labels based on strategy logic with triple-barrier method.
         
         Args:
             feature_dfs: Dict of symbol -> feature DataFrame
@@ -282,11 +303,15 @@ class MLPipeline:
             end_date: Optional end date filter
             
         Returns:
-            Tuple of (X, y) or (None, None)
+            Tuple of (X, y, sample_weights) or (None, None, None)
         """
         try:
+            # Check if triple-barrier labeling is enabled
+            use_triple_barrier = self.config.get('ml_training', {}).get('labeling', {}).get('use_triple_barrier', True)
+            
             X_list = []
             y_list = []
+            weights_list = []
             
             for symbol, df in feature_dfs.items():
                 df = df.copy()
@@ -300,47 +325,88 @@ class MLPipeline:
                 if len(df) < 50:
                     continue
                 
-                # Create labels based on strategy
-                if strategy_name == 'intraday_mean_reversion':
-                    # Label = 1 if next period return is positive
-                    df['label'] = (df['returns'].shift(-1) > 0).astype(int)
-                
-                elif strategy_name == 'swing_trend_following':
-                    # Label = 1 if 5-period forward return is positive
-                    df['forward_return'] = df['close'].shift(-5) / df['close'] - 1
-                    df['label'] = (df['forward_return'] > 0.01).astype(int)  # >1% gain
-                
+                # Apply triple-barrier labeling if enabled
+                if use_triple_barrier and 'atr_14' in df.columns:
+                    logger.debug(f"Applying triple-barrier labeling for {symbol}")
+                    df = self.labeler.apply_triple_barrier(df, price_col='close', atr_col='atr_14')
+                    
+                    # Use meta-labeling if enabled
+                    if self.labeler.enable_meta_labeling:
+                        df = self.labeler.create_meta_labels(df)
+                        # Use meta_label_filter as target
+                        target_col = 'meta_label_filter'
+                    else:
+                        target_col = 'label'
+                    
+                    # Calculate sample weights
+                    if 'return_at_exit' in df.columns and 'holding_period' in df.columns:
+                        weights = SampleWeights.calculate_combined_weights(
+                            df,
+                            df[target_col],
+                            returns=df['return_at_exit']
+                        )
+                    else:
+                        weights = pd.Series(1.0, index=df.index)
                 else:
-                    logger.warning(f"Unknown strategy for labeling: {strategy_name}")
-                    continue
+                    # Fallback to simple forward-looking labels
+                    logger.debug(f"Using simple labeling for {symbol}")
+                    if strategy_name == 'intraday_mean_reversion':
+                        # Label = 1 if next period return is positive
+                        df['label'] = (df['returns'].shift(-1) > 0).astype(int)
+                    
+                    elif strategy_name == 'swing_trend_following':
+                        # Label = 1 if 5-period forward return is positive
+                        df['forward_return'] = df['close'].shift(-5) / df['close'] - 1
+                        df['label'] = (df['forward_return'] > 0.01).astype(int)  # >1% gain
+                    
+                    else:
+                        logger.warning(f"Unknown strategy for labeling: {strategy_name}")
+                        continue
+                    
+                    target_col = 'label'
+                    weights = pd.Series(1.0, index=df.index)
                 
                 # Drop rows with NaN
                 df = df.dropna()
+                weights = weights[df.index]
                 
                 if len(df) == 0:
                     continue
                 
                 # Extract features and labels
-                feature_cols = [col for col in df.columns if col not in ['label', 'close', 'returns', 'forward_return', 'timestamp', 'symbol']]
+                exclude_cols = ['label', 'close', 'returns', 'forward_return', 'timestamp', 'symbol',
+                               'barrier_touched', 'return_at_exit', 'holding_period', 
+                               'meta_label_filter', 'meta_label_direction']
+                feature_cols = [col for col in df.columns if col not in exclude_cols]
                 
                 X_symbol = df[feature_cols]
-                y_symbol = df['label']
+                y_symbol = df[target_col]
                 
                 X_list.append(X_symbol)
                 y_list.append(y_symbol)
+                weights_list.append(weights)
             
             if not X_list:
-                return None, None
+                return None, None, None
             
             # Combine all symbols
             X = pd.concat(X_list, ignore_index=True)
             y = pd.concat(y_list, ignore_index=True)
+            sample_weights = pd.concat(weights_list, ignore_index=True)
             
-            return X, y
+            logger.info(
+                f"Labels created | "
+                f"Samples: {len(X)}, "
+                f"Positive rate: {y.mean():.2%}, "
+                f"Weighted positive rate: {(y * sample_weights).sum() / sample_weights.sum():.2%}"
+            )
+            
+            return X, y, sample_weights
             
         except Exception as e:
             logger.error(f"Error creating labels: {e}")
-            return None, None
+            logger.error(traceback.format_exc())
+            return None, None, None
     
     def _run_walk_forward_validation(
         self,

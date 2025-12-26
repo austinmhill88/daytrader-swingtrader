@@ -920,3 +920,236 @@ class ExecutionEngine:
             
         except Exception as e:
             logger.error(f"Error handling stale order {order_id}: {e}")
+    
+    def calculate_mid_price(
+        self,
+        symbol: str,
+        bid: Optional[float] = None,
+        ask: Optional[float] = None
+    ) -> Optional[float]:
+        """
+        Calculate mid-price from bid/ask quotes.
+        
+        Args:
+            symbol: Stock symbol
+            bid: Bid price (if None, fetches from client)
+            ask: Ask price (if None, fetches from client)
+            
+        Returns:
+            Mid-price or None if quotes unavailable
+        """
+        try:
+            # Fetch quotes if not provided
+            if bid is None or ask is None:
+                quote = self.client.get_latest_quote(symbol)
+                if quote:
+                    bid = quote.get('bp', quote.get('bid'))
+                    ask = quote.get('ap', quote.get('ask'))
+            
+            if bid and ask and bid > 0 and ask > 0:
+                mid = (bid + ask) / 2.0
+                logger.debug(f"Mid-price for {symbol}: ${mid:.4f} (bid: ${bid:.4f}, ask: ${ask:.4f})")
+                return mid
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error calculating mid-price for {symbol}: {e}")
+            return None
+    
+    def calculate_spread_bps(
+        self,
+        symbol: str,
+        bid: Optional[float] = None,
+        ask: Optional[float] = None
+    ) -> Optional[float]:
+        """
+        Calculate bid-ask spread in basis points.
+        
+        Args:
+            symbol: Stock symbol
+            bid: Bid price (if None, fetches from client)
+            ask: Ask price (if None, fetches from client)
+            
+        Returns:
+            Spread in basis points or None
+        """
+        try:
+            # Fetch quotes if not provided
+            if bid is None or ask is None:
+                quote = self.client.get_latest_quote(symbol)
+                if quote:
+                    bid = quote.get('bp', quote.get('bid'))
+                    ask = quote.get('ap', quote.get('ask'))
+            
+            if bid and ask and bid > 0 and ask > 0:
+                mid = (bid + ask) / 2.0
+                spread_bps = ((ask - bid) / mid) * 10000
+                logger.debug(f"Spread for {symbol}: {spread_bps:.2f} bps")
+                return spread_bps
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error calculating spread for {symbol}: {e}")
+            return None
+    
+    def calculate_spread_aware_limit_price(
+        self,
+        side: OrderSide,
+        symbol: str,
+        mid_price: Optional[float] = None,
+        spread_bps: Optional[float] = None,
+        spread_fraction: float = 0.25
+    ) -> Optional[float]:
+        """
+        Calculate spread-aware limit price.
+        For buys: mid - (spread_fraction * spread)
+        For sells: mid + (spread_fraction * spread)
+        
+        Args:
+            side: Order side (BUY or SELL)
+            symbol: Stock symbol
+            mid_price: Mid-price (if None, calculates from quotes)
+            spread_bps: Spread in bps (if None, calculates from quotes)
+            spread_fraction: Fraction of spread to use (default 0.25 = 25%)
+            
+        Returns:
+            Limit price or None
+        """
+        try:
+            # Get quote if needed
+            if mid_price is None or spread_bps is None:
+                quote = self.client.get_latest_quote(symbol)
+                if not quote:
+                    return None
+                
+                bid = quote.get('bp', quote.get('bid'))
+                ask = quote.get('ap', quote.get('ask'))
+                
+                if not bid or not ask:
+                    return None
+                
+                if mid_price is None:
+                    mid_price = (bid + ask) / 2.0
+                
+                if spread_bps is None:
+                    spread_bps = ((ask - bid) / mid_price) * 10000
+            
+            # Calculate spread adjustment in dollars
+            spread_dollars = (spread_bps / 10000) * mid_price
+            adjustment = spread_dollars * spread_fraction
+            
+            # Apply adjustment based on side
+            if side == OrderSide.BUY:
+                limit_price = mid_price - adjustment
+            else:  # SELL
+                limit_price = mid_price + adjustment
+            
+            logger.debug(
+                f"Spread-aware limit for {symbol} {side.value}: "
+                f"${limit_price:.4f} (mid: ${mid_price:.4f}, spread: {spread_bps:.2f} bps)"
+            )
+            
+            return round(limit_price, 2)
+            
+        except Exception as e:
+            logger.error(f"Error calculating spread-aware price for {symbol}: {e}")
+            return None
+    
+    def check_liquidity_quality(
+        self,
+        symbol: str,
+        qty: int,
+        adv_shares: Optional[float] = None,
+        max_spread_bps: Optional[float] = None
+    ) -> Tuple[bool, str]:
+        """
+        Check if symbol meets liquidity quality requirements.
+        
+        Args:
+            symbol: Stock symbol
+            qty: Proposed order quantity
+            adv_shares: Average daily volume in shares
+            max_spread_bps: Maximum allowed spread in bps
+            
+        Returns:
+            Tuple of (is_acceptable, reason)
+        """
+        try:
+            # Get configuration
+            if max_spread_bps is None:
+                max_spread_bps = self.config.get('universe', {}).get('max_spread_bps', 50)
+            
+            # Check spread
+            spread_bps = self.calculate_spread_bps(symbol)
+            if spread_bps is not None and spread_bps > max_spread_bps:
+                return False, f"Spread {spread_bps:.2f} bps > max {max_spread_bps} bps"
+            
+            # Check ADV participation if available
+            if adv_shares is not None:
+                participation_rate = qty / adv_shares
+                max_participation = 0.02  # 2% max for single order
+                
+                if participation_rate > max_participation:
+                    return False, f"Order size {participation_rate:.2%} of ADV > max {max_participation:.2%}"
+            
+            # Check for SSR (Short Sale Restriction) if selling
+            # TODO: Implement SSR detection via broker API or circuit breaker data
+            
+            # Check for halts
+            # TODO: Implement halt detection via broker API
+            
+            return True, "Liquidity quality acceptable"
+            
+        except Exception as e:
+            logger.error(f"Error checking liquidity for {symbol}: {e}")
+            return False, f"Error checking liquidity: {str(e)}"
+    
+    def is_toxic_time(
+        self,
+        current_time: Optional[datetime] = None,
+        check_spread: bool = True,
+        spread_threshold_bps: float = 100
+    ) -> Tuple[bool, str]:
+        """
+        Check if current time is a "toxic" trading window.
+        Enhanced with spread and volatility checks.
+        
+        Args:
+            current_time: Time to check (defaults to now)
+            check_spread: Whether to check spread conditions
+            spread_threshold_bps: Maximum spread for toxic time (default 100 bps)
+            
+        Returns:
+            Tuple of (is_toxic, reason)
+        """
+        if not self.enable_toxic_time_filtering:
+            return False, ""
+        
+        if current_time is None:
+            current_time = datetime.now()
+        
+        # Extract time components
+        hour = current_time.hour
+        minute = current_time.minute
+        
+        # Market open window (9:30 AM + blackout_minutes)
+        market_open_hour = 9
+        market_open_minute = 30
+        if hour == market_open_hour:
+            if minute < market_open_minute + self.market_open_blackout_minutes:
+                return True, f"Market open blackout (first {self.market_open_blackout_minutes} minutes)"
+        
+        # Market close window (4:00 PM - blackout_minutes)
+        market_close_hour = 16
+        market_close_minute = 0
+        if hour == market_close_hour - 1:
+            if minute >= 60 - self.market_close_blackout_minutes:
+                return True, f"Market close blackout (last {self.market_close_blackout_minutes} minutes)"
+        elif hour == market_close_hour:
+            return True, "After market close"
+        
+        # TODO: Add event-based blackouts (FOMC, earnings, etc.)
+        
+        return False, ""
