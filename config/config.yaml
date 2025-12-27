@@ -1,8 +1,8 @@
 environment: paper  # "paper" or "live"
 
 alpaca:
-  key_id: PK7PJAFUMA3AUF6V42JTFZ3GFN
-  secret_key: Cyf3DF2MAcLEy2tfv83TdmLkee8qstPPw87a8fWeEQ8R
+  key_id: 
+  secret_key: 
   base_url: https://paper-api.alpaca.markets
   data_feed: "iex"  # "iex" or "sip" (requires subscription)
   reconnect_attempts: 5
